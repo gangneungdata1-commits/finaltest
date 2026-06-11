@@ -2,9 +2,29 @@ node_modules/
 *.log
 .DS_Store
 
+# 환경설정 (실제 키/URL 포함, 절대 커밋 금지)
+config.js
+.env
+
+# 배치파일
+*.bat
+
 # 한글 문서
 *.hwp
 *.hwpx
+
+# 데이터/업로드/백업/결과 파일 (개인정보 포함 가능)
+data/
+upload/
+uploads/
+backup/
+backups/
+result/
+results/
+*.csv
+*.xlsx
+*.xls
+*.pdf
 
 # Claude
 .claude/
