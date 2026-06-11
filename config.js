@@ -6,5 +6,5 @@ window.CONFIG = {
   // - 발급받은 Web App URL 주소를 아래 따옴표 안에 붙여넣어 줍니다.
   // - 입력 시 프로그램이 로컬 저장소 대신 실제 구글 스프레드시트 DB와 실시간 통신을 개시합니다.
   // - 비워둘 경우 브라우저 로컬 저장소(LocalStorage) 모드로 안전하게 작동합니다.
-  GOOGLE_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbzwExzOQARizRDAM8gbqRRnWstj3b9yiKy2yQ6slXyMDYx3-sHL2nvudEkE7jTqKx0ihQ/exec"
+  GOOGLE_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbxpw-1hwOFuCKUhia0sEVCdV7HhVSnHVbigwsnVwOQyoyytePr0YySCbzUVH_Yg_ugOQw/exec"
 };
