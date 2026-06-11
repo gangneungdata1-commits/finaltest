@@ -1,10 +1,11 @@
 // Standalone Client-Side Application Logic for Expert Activity Tracker (User Version)
 
-// 1. DEFAULT SEED DATA (MAPPED TO THE NEW SCHEME - STARTS EMPTY)
+// 1. DEFAULT SEED DATA (STARTS EMPTY)
 const DEFAULT_ACTIVITIES = [];
 
 // 2. STATE STORAGE MANAGEMENT
 let activities = [];
+let dbMode = "local"; // "local" or "sheets"
 let viewMode = "list";
 let searchTerm = "";
 let typeFilter = "전체";
@@ -12,15 +13,74 @@ let currentCalendarDate = new Date(2026, 5, 11); // June 11, 2026
 let selectedActivity = null;
 let icalMethod = "text"; // "text" or "file"
 let editingActivityId = null; // State for tracking the currently edited activity
+let sheetsUrl = ""; // Google Sheets Apps Script Web App URL
 
-// Initialize database
-function initDatabase() {
+// Initialize database (Supports real-time Google Sheets or localStorage fallback)
+async function initDatabase() {
+  // Clear any old/stale developer activities once to guarantee a fresh, empty start!
+  const currentVersion = "2.1";
+  const savedVersion = localStorage.getItem("standalone_version");
+  if (savedVersion !== currentVersion) {
+    localStorage.removeItem("standalone_activities");
+    localStorage.setItem("standalone_version", currentVersion);
+  }
+
+  // Load saved Database Mode preference
+  const savedDbMode = localStorage.getItem("standalone_db_mode");
+  if (savedDbMode) {
+    dbMode = savedDbMode;
+    const select = document.getElementById("db-mode-select");
+    if (select) select.value = dbMode;
+  }
+
+  // Load saved Sheets Web App URL
+  const savedUrl = localStorage.getItem("standalone_sheets_url");
+  if (savedUrl) {
+    sheetsUrl = savedUrl;
+    const input = document.getElementById("google-web-app-url");
+    if (input) input.value = sheetsUrl;
+  } else {
+    sheetsUrl = window.CONFIG?.GOOGLE_WEB_APP_URL || "";
+    const input = document.getElementById("google-web-app-url");
+    if (input) input.value = sheetsUrl;
+  }
+
+  const urlContainer = document.getElementById("sheets-url-container");
+  if (dbMode === "sheets") {
+    urlContainer.classList.remove("hidden");
+    if (sheetsUrl) {
+      updateSheetsSyncStatus("connecting");
+      try {
+        // Fetch real-time activities list from Google Sheets DB
+        const res = await fetch(`${sheetsUrl}?action=get`);
+        if (!res.ok) throw new Error("Network response was not ok");
+        activities = await res.json();
+        updateSheetsSyncStatus("connected");
+      } catch (e) {
+        console.error("Failed to fetch Google Sheets data, falling back to localStorage", e);
+        updateSheetsSyncStatus("error");
+        loadFromLocalStorage();
+      }
+    } else {
+      updateSheetsSyncStatus("local");
+      loadFromLocalStorage();
+    }
+  } else {
+    urlContainer.classList.add("hidden");
+    updateSheetsSyncStatus("local");
+    loadFromLocalStorage();
+  }
+  
+  renderMainApp();
+}
+
+function loadFromLocalStorage() {
   const localData = localStorage.getItem("standalone_activities");
   if (localData) {
     try {
       activities = JSON.parse(localData);
       
-      // Filter out any old mock seed data starting with "act_init" so the user starts completely empty!
+      // Filter out any old mock seed data starting with "act_init"
       activities = activities.filter(act => act.id && !act.id.startsWith("act_init"));
       
       // Automatic Schema Migration: Upgrades any old activities stored in the user's browser
@@ -43,18 +103,28 @@ function initDatabase() {
       });
       saveDatabase();
     } catch (e) {
-      console.error("Failed to parse localStorage data, seeding default instead", e);
-      activities = [...DEFAULT_ACTIVITIES];
+      console.error("Failed to parse localStorage data", e);
+      activities = [];
       saveDatabase();
     }
   } else {
-    activities = [...DEFAULT_ACTIVITIES];
+    activities = [];
     saveDatabase();
   }
 }
 
 function saveDatabase() {
   localStorage.setItem("standalone_activities", JSON.stringify(activities));
+}
+
+// DB Mode Selector toggles
+function handleDbModeChange() {
+  const select = document.getElementById("db-mode-select");
+  dbMode = select.value;
+  localStorage.setItem("standalone_db_mode", dbMode);
+  
+  // Re-trigger DB load & sync status
+  initDatabase();
 }
 
 // 3. MAIN APP VIEW CONTROLLER
@@ -75,11 +145,9 @@ function renderMainApp() {
     resetBtn.classList.add("hidden");
   }
 
-  if (viewMode === "list") {
-    renderListView(filtered);
-  } else {
-    renderCalendarView(filtered);
-  }
+  // ALWAYS render both views on load so that Tailwind JIT CDN parses all dynamically created classes instantly!
+  renderListView(filtered);
+  renderCalendarView(filtered);
   
   // Re-instantiate icons
   lucide.createIcons();
@@ -135,18 +203,17 @@ function switchViewMode(mode) {
   const viewTitle = document.getElementById("view-mode-title");
 
   if (mode === "list") {
-    btnList.className = "p-1 rounded-md transition-all bg-white dark:bg-slate-900 text-blue-600 shadow-xs font-bold";
+    btnList.className = "p-1 rounded-md transition-all bg-white dark:bg-[#111827] text-blue-600 shadow-xs font-bold";
     btnCal.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200";
     listContainer.classList.remove("hidden");
     calContainer.classList.add("hidden");
     viewTitle.innerText = "보고서 일정 리스트";
   } else {
     btnList.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200";
-    btnCal.className = "p-1 rounded-md transition-all bg-white dark:bg-slate-900 text-blue-600 shadow-xs font-bold";
+    btnCal.className = "p-1 rounded-md transition-all bg-white dark:bg-[#111827] text-blue-600 shadow-xs font-bold";
     listContainer.classList.add("hidden");
     calContainer.classList.remove("hidden");
     viewTitle.innerText = "보고서 일정 캘린더";
-    closeCalendarDetails();
   }
 
   renderMainApp();
@@ -157,7 +224,7 @@ function renderListView(filtered) {
   const container = document.getElementById("view-list-container");
   if (filtered.length === 0) {
     container.innerHTML = `
-      <div class="text-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-400 space-y-2 select-none">
+      <div class="text-center py-20 border-2 border-dashed border-slate-200 dark:border-[#1f2937] rounded-xl bg-slate-50 dark:bg-[#111827]/40 text-slate-400 dark:text-slate-555 space-y-2 select-none">
         <i data-lucide="calendar" class="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600"></i>
         <p class="text-xs font-semibold">조건에 일치하는 공무원 보고 일정이 없습니다.</p>
         <p class="text-[10px] text-slate-400">새로운 일정을 입력하고 필터링 조회를 확인하세요.</p>
@@ -181,11 +248,11 @@ function renderListView(filtered) {
       : "border-l-emerald-500";
 
     const badgeClass = isExternal 
-      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" 
-      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300";
+      ? "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400" 
+      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400";
 
     return `
-      <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex gap-4 bg-white dark:bg-slate-900 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-750 transition-all border-l-4 ${borderClass} animate-fade-in text-left">
+      <div class="border border-slate-200 dark:border-[#1f2937] rounded-xl p-4 flex gap-4 bg-white dark:bg-[#111827] hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all border-l-4 ${borderClass} animate-fade-in text-left">
         <div class="flex-1 space-y-2">
           
           <!-- Meta Info -->
@@ -206,30 +273,30 @@ function renderListView(filtered) {
 
           <!-- Title -->
           <div>
-            <h4 class="font-bold text-slate-850 dark:text-slate-200 text-[14px]">
+            <h4 class="font-bold text-slate-850 dark:text-slate-100 text-[14px]">
               <span class="text-blue-600 dark:text-blue-400 font-bold mr-1">[${act.dept}]</span> ${act.subject}
             </h4>
           </div>
 
           <!-- Details Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg text-xs text-slate-600 dark:text-slate-400 font-medium">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 dark:bg-[#151c2c]/40 p-2 rounded-lg text-xs text-slate-600 dark:text-slate-400 font-medium">
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 dark:text-slate-500 text-[10px] w-12 shrink-0">👤 담당자</span>
+              <span class="text-slate-400 dark:text-slate-550 text-[10px] w-12 shrink-0">👤 담당자</span>
               <span class="truncate text-slate-700 dark:text-slate-300">${act.manager} ${act.phone ? `(${act.phone})` : ''}</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 dark:text-slate-500 text-[10px] w-12 shrink-0">🏢 장소</span>
+              <span class="text-slate-400 dark:text-slate-550 text-[10px] w-12 shrink-0">🏢 장소</span>
               <span class="truncate text-slate-700 dark:text-slate-300">${act.location || '없음'}</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 dark:text-slate-500 text-[10px] w-12 shrink-0">👥 참석자</span>
+              <span class="text-slate-400 dark:text-slate-550 text-[10px] w-12 shrink-0">👥 참석자</span>
               <span class="truncate text-slate-700 dark:text-slate-300">${act.attendees || '없음'}</span>
             </div>
           </div>
 
           <!-- Content Memo -->
           ${act.content ? `
-            <p class="text-slate-500 dark:text-slate-400 text-[11px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-2 rounded-lg italic">
+            <p class="text-slate-500 dark:text-slate-400 text-[11px] bg-white dark:bg-[#1a2336] border border-slate-100 dark:border-[#2d394e] p-2 rounded-lg italic">
               💡 ${act.content}
             </p>
           ` : ''}
@@ -237,11 +304,11 @@ function renderListView(filtered) {
         </div>
 
         <!-- Edit & Delete Action Side -->
-        <div class="flex flex-col gap-2 justify-center border-l border-slate-100 dark:border-slate-800 pl-3 select-none">
+        <div class="flex flex-col gap-2 justify-center border-l border-slate-100 dark:border-[#1f2937] pl-3 select-none">
           <button
             type="button"
             onclick="editActivityFromList('${act.id}')"
-            class="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition active:scale-95 cursor-pointer"
+            class="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-[#1a2336]/40 rounded-xl transition active:scale-95 cursor-pointer"
             title="일정 수정"
           >
             <i data-lucide="edit-3" class="w-4 h-4"></i>
@@ -249,7 +316,7 @@ function renderListView(filtered) {
           <button
             type="button"
             onclick="deleteActivity('${act.id}')"
-            class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition active:scale-95 cursor-pointer"
+            class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-[#1a2336]/40 rounded-xl transition active:scale-95 cursor-pointer"
             title="일정 삭제"
           >
             <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -259,6 +326,20 @@ function renderListView(filtered) {
       </div>
     `;
   }).join("");
+}
+
+// Delete Handler (Synchronized with Google Sheets if connected)
+async function deleteActivity(id) {
+  if (!confirm("해당 일정을 삭제하시겠습니까?")) return;
+  activities = activities.filter(a => a.id !== id);
+  saveDatabase();
+  renderMainApp();
+
+  if (dbMode === "sheets" && sheetsUrl) {
+    updateSheetsSyncStatus("connecting");
+    await syncToGoogleSheets("delete", id);
+    updateSheetsSyncStatus("connected");
+  }
 }
 
 // 5. RENDER DYNAMIC CALENDAR ENGINE (VANILLA PORT FROM REACT)
@@ -407,13 +488,13 @@ function renderCalendarView(filtered) {
 
     // Week Row Div
     const weekRowDiv = document.createElement("div");
-    weekRowDiv.className = "relative bg-white dark:bg-slate-900 flex flex-col border-b border-slate-100 dark:border-slate-800 transition-colors duration-200";
+    weekRowDiv.className = "relative bg-white dark:bg-[#111827] flex flex-col border-b border-slate-100 dark:border-[#1f2937] transition-colors duration-200";
     weekRowDiv.style.minHeight = `${minHeight}px`;
 
     // 1. Grid Background & Vertical lines
-    let bgHtml = `<div class="grid grid-cols-7 absolute inset-0 divide-x divide-slate-100/70 dark:divide-slate-800/40 pointer-events-none">`;
+    let bgHtml = `<div class="grid grid-cols-7 absolute inset-0 divide-x divide-slate-100/70 dark:divide-[#1f2937]/50 pointer-events-none">`;
     weekDays.forEach(dayObj => {
-      const bgClass = !dayObj.isCurrentMonth ? "bg-slate-50/40 dark:bg-slate-950/20" : "bg-white dark:bg-slate-900";
+      const bgClass = !dayObj.isCurrentMonth ? "bg-slate-50/40 dark:bg-slate-950/20" : "bg-white dark:bg-[#111827]";
       const todayClass = dayObj.isToday ? "bg-blue-50/25 dark:bg-blue-900/10" : "";
       bgHtml += `<div class="h-full ${bgClass} ${todayClass}"></div>`;
     });
@@ -465,9 +546,9 @@ function renderCalendarView(filtered) {
 
       let colorClass = "bg-[#7084d3] text-white hover:bg-[#5f73c5] border border-[#7084d3]/30 shadow-xs";
       if (act.type === "대외") {
-        colorClass = "bg-[#5e72e4] text-white hover:bg-[#4d61d3] border border-[#5e72e4]/30 shadow-xs";
+        colorClass = "bg-[#5e72e4] text-white hover:bg-[#4d61d3] border border-[#5e72e4]/20 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/30 dark:hover:bg-indigo-500/25 shadow-xs";
       } else if (act.type === "내부") {
-        colorClass = "bg-[#2dce89] text-white hover:bg-[#24b97a] border border-[#2dce89]/30 shadow-xs";
+        colorClass = "bg-[#2dce89] text-white hover:bg-[#24b97a] border border-[#2dce89]/20 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 dark:hover:bg-emerald-500/25 shadow-xs";
       }
 
       const lRound = isStartThisWeek ? "rounded-l-md" : "rounded-l-none";
@@ -482,7 +563,7 @@ function renderCalendarView(filtered) {
       btn.title = `[${act.dept}] ${act.subject}`;
       btn.innerHTML = `<span class="truncate w-full pr-1 font-bold">[${act.dept}] ${act.subject}</span>`;
       
-      btn.onclick = () => showCalendarDetails(act);
+      btn.onclick = () => editActivityFromList(act.id);
       barsContainer.appendChild(btn);
     });
 
@@ -491,55 +572,7 @@ function renderCalendarView(filtered) {
   });
 }
 
-// Calendar Detail Box Controllers
-function showCalendarDetails(act) {
-  selectedActivity = act;
-  const card = document.getElementById("calendar-detail-card");
-  card.classList.remove("hidden");
-
-  // Format colors
-  const isExternal = act.type === "대외";
-  let badgeColor = isExternal ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300";
-
-  document.getElementById("detail-card-badge").className = `text-[9px] font-bold px-1.5 py-0.5 rounded ${badgeColor}`;
-  document.getElementById("detail-card-badge").innerText = act.type;
-  document.getElementById("detail-card-time").innerText = act.time || "09:00";
-  document.getElementById("detail-card-dates").innerText = `${act.startDate} ~ ${act.endDate || act.startDate}`;
-  document.getElementById("detail-card-title").innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-bold mr-1">[${act.dept}]</span> ${act.subject}`;
-  document.getElementById("detail-card-manager").innerText = `👤 담당자: ${act.manager} ${act.phone ? `(${act.phone})` : ''}`;
-  document.getElementById("detail-card-location").innerText = `🏢 장소: ${act.location || "없음"}`;
-  document.getElementById("detail-card-attendees").innerText = `👥 참석자: ${act.attendees || "없음"}`;
-  
-  const contentEl = document.getElementById("detail-card-content");
-  if (act.content) {
-    contentEl.innerText = `💡 내용: ${act.content}`;
-    contentEl.classList.remove("hidden");
-  } else {
-    contentEl.classList.add("hidden");
-  }
-}
-
-function closeCalendarDetails() {
-  selectedActivity = null;
-  document.getElementById("calendar-detail-card").classList.add("hidden");
-}
-
-function deleteActivityInDetails() {
-  if (!selectedActivity) return;
-  if (!confirm(`[${selectedActivity.subject}] 일정을 삭제하시겠습니까?`)) return;
-  activities = activities.filter(a => a.id !== selectedActivity.id);
-  
-  // If we were editing this deleted activity, exit edit mode too!
-  if (editingActivityId === selectedActivity.id) {
-    exitEditMode();
-  }
-
-  saveDatabase();
-  closeCalendarDetails();
-  renderMainApp();
-}
-
-// 6. EDITING PROCESS (CALENDAR POPUP & LIST BUTTONS)
+// 6. EDITING PROCESS (CALENDAR CLICK & LIST BUTTONS)
 function populateFormWithActivity(act) {
   document.getElementById("form-start-date").value = act.startDate;
   document.getElementById("form-end-date").value = act.endDate || act.startDate;
@@ -552,12 +585,6 @@ function populateFormWithActivity(act) {
   document.getElementById("form-location").value = act.location || "";
   document.getElementById("form-attendees").value = act.attendees || "";
   document.getElementById("form-content").value = act.content || "";
-}
-
-function editSelectedActivityFromCalendar() {
-  if (!selectedActivity) return;
-  editActivityFromList(selectedActivity.id);
-  closeCalendarDetails(); // Close the popover after editing starts
 }
 
 function editActivityFromList(id) {
@@ -597,7 +624,7 @@ function exitEditMode() {
 }
 
 // 7. HANDLERS FOR NEW MANUAL FORM SUBMISSIONS (CREATE & UPDATE)
-function handleFormSubmit(e) {
+async function handleFormSubmit(e) {
   e.preventDefault();
   
   const start = document.getElementById("form-start-date").value;
@@ -617,51 +644,60 @@ function handleFormSubmit(e) {
     return;
   }
 
+  const payloadData = {
+    startDate: start,
+    endDate: end || start,
+    time: time,
+    type: type,
+    dept: dept,
+    manager: manager,
+    phone: phone || "",
+    subject: subject,
+    location: location || "",
+    attendees: attendees || "",
+    content: content || ""
+  };
+
   if (editingActivityId) {
     // 1) UPDATE MODE
     activities = activities.map(act => {
       if (act.id === editingActivityId) {
         return {
           ...act,
-          startDate: start,
-          endDate: end || start,
-          time: time,
-          type: type,
-          dept: dept,
-          manager: manager,
-          phone: phone || "",
-          subject: subject,
-          location: location || "",
-          attendees: attendees || "",
-          content: content || ""
+          ...payloadData
         };
       }
       return act;
     });
 
     alert("보고서 일정이 성공적으로 수정 완료되었습니다!");
+    
+    // Sync to Google Sheets if connected
+    if (dbMode === "sheets" && sheetsUrl) {
+      updateSheetsSyncStatus("connecting");
+      await syncToGoogleSheets("update", editingActivityId, payloadData);
+      updateSheetsSyncStatus("connected");
+    }
+    
     exitEditMode();
   } else {
     // 2) CREATE MODE
     const newActivity = {
       id: "act_" + Math.random().toString(36).substring(2, 11),
-      startDate: start,
-      endDate: end || start,
-      time: time,
-      type: type,
-      dept: dept,
-      manager: manager,
-      phone: phone || "",
-      subject: subject,
-      location: location || "",
-      attendees: attendees || "",
-      content: content || "",
+      ...payloadData,
       createdAt: new Date().toISOString()
     };
 
     activities.push(newActivity);
     alert("일정 보고서가 성공적으로 기록 및 연동되었습니다!");
     
+    // Sync to Google Sheets if connected
+    if (dbMode === "sheets" && sheetsUrl) {
+      updateSheetsSyncStatus("connecting");
+      await syncToGoogleSheets("create", newActivity.id, newActivity);
+      updateSheetsSyncStatus("connected");
+    }
+
     // Reset Form
     document.getElementById("activity-form").reset();
   }
@@ -670,12 +706,69 @@ function handleFormSubmit(e) {
   renderMainApp();
 }
 
+// 8. SYNCHRONIZE CRUD TO GOOGLE SHEETS WEB APP BACKEND
+async function syncToGoogleSheets(action, id, data) {
+  if (!sheetsUrl) return;
+  try {
+    const res = await fetch(sheetsUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, id, data }),
+      mode: "cors"
+    });
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || "Unknown error");
+    }
+  } catch (e) {
+    console.error("Failed to sync change to Google Sheets:", e);
+    alert("구글 스프레드시트 동기화 실패: " + e.message + "\n(데이터는 브라우저 로컬 저장소에 우선 저장되었습니다.)");
+  }
+}
+
+function handleSheetsUrlChange() {
+  const url = document.getElementById("google-web-app-url").value.trim();
+  if (url) {
+    localStorage.setItem("standalone_sheets_url", url);
+    sheetsUrl = url;
+  } else {
+    localStorage.removeItem("standalone_sheets_url");
+    sheetsUrl = "";
+  }
+  initDatabase(); // Re-trigger DB load and refresh with the new URL!
+}
+
+function updateSheetsSyncStatus(status) {
+  const text = document.getElementById("sheets-sync-text");
+  if (!text) return;
+
+  if (dbMode === "local") {
+    text.innerText = "로컬 브라우저 저장소 연동 모드";
+    text.className = "text-xs font-bold text-white mt-1";
+  } else {
+    if (status === "connecting") {
+      text.innerText = "구글 시트 연동 수신 중...";
+      text.className = "text-xs font-bold text-amber-400 mt-1 animate-pulse";
+    } else if (status === "connected") {
+      text.innerText = "구글 스프레드시트 실시간 동기화";
+      text.className = "text-xs font-bold text-emerald-400 mt-1";
+    } else if (status === "error") {
+      text.innerText = "구글 시트 동기화 오류 (로컬 모드)";
+      text.className = "text-xs font-bold text-rose-400 mt-1";
+    } else {
+      text.innerText = "구글 시트 연동 주소 입력 대기 중";
+      text.className = "text-xs font-bold text-slate-350 mt-1";
+    }
+  }
+}
+
 // Calendar Navigations
 function navigateCalendarToday() {
   currentCalendarDate = new Date();
   renderMainApp();
 }
 
+// Calendar Navigation Forward/Backward
 function navigateCalendarPrev() {
   const y = currentCalendarDate.getFullYear();
   const m = currentCalendarDate.getMonth();
@@ -683,6 +776,7 @@ function navigateCalendarPrev() {
   renderMainApp();
 }
 
+// Calendar Navigation Forward
 function navigateCalendarNext() {
   const y = currentCalendarDate.getFullYear();
   const m = currentCalendarDate.getMonth();
@@ -706,7 +800,7 @@ function safeParseDate(dateStr) {
   return null;
 }
 
-// 8. AI PARSING ASSISTANT (GEMINI & HEURISTIC FALLBACK)
+// 9. AI PARSING ASSISTANT (GEMINI & HEURISTIC FALLBACK)
 function toggleApiKeyVisibility() {
   const el = document.getElementById("gemini-api-key");
   const eye = document.getElementById("api-key-eye");
@@ -926,7 +1020,7 @@ function heuristicParse(text) {
   return result;
 }
 
-// 9. ICAL MODAL CONTROLLER & ICS RFC 5545 PARSER
+// 10. ICAL MODAL CONTROLLER & ICS RFC 5545 PARSER
 function openIcalModal() {
   document.getElementById("ical-modal").classList.remove("hidden");
 }
@@ -1071,11 +1165,14 @@ function parseAndMergeIcs(icsText) {
   }
 }
 
-// 10. DARK/LIGHT THEME CONTROLLER
+// 11. DARK/LIGHT THEME CONTROLLER
 function toggleDarkMode() {
   const isDark = document.documentElement.classList.toggle("dark");
   localStorage.setItem("standalone_theme", isDark ? "dark" : "light");
   updateThemeIcons(isDark);
+  
+  // Force a re-render to repaint all dynamically generated elements with new dark/light classes!
+  renderMainApp();
 }
 
 function updateThemeIcons(isDark) {
@@ -1103,7 +1200,7 @@ function loadThemePreference() {
   updateThemeIcons(useDark);
 }
 
-// 11. INITIALIZATION EVENT TRIGGER
+// 12. INITIALIZATION EVENT TRIGGER
 function refreshData() {
   initDatabase();
   renderMainApp();
