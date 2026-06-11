@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공무원 일정 보고서 자동화 - 일정비서관</title>
+  <title>일정비서관-공무원 일정 보고서 자동화</title>
   <!-- Load Local Configuration (Offline .env equivalent) -->
   <script src="config.js"></script>
   <!-- Tailwind CSS CDN -->
@@ -76,7 +76,7 @@
         </div>
         <div class="text-left">
           <h1 class="text-lg md:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            공무원 일정 보고서 자동화 - 일정비서관
+            일정비서관-공무원 일정 보고서 자동화
           </h1>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-semibold">
             매주 반복되는 보고서, 이제 일정비서관에게 맡기세요
@@ -324,12 +324,11 @@
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 leading-none uppercase">
-                    시간 *
+                    시간
                   </label>
                   <input
                     type="text"
                     id="form-time"
-                    required
                     placeholder="예: 14:00"
                     class="w-full p-2 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 font-mono transition-colors duration-200"
                   />
@@ -572,7 +571,7 @@
             </div>
 
             <!-- Render Target - LIST VIEW -->
-            <div id="view-list-container" class="space-y-3 max-h-[550px] overflow-y-auto pr-1">
+            <div id="view-list-container" class="space-y-3 max-h-[600px] overflow-y-auto pr-1">
               <!-- Dynamically populated via JS -->
             </div>
 
@@ -652,6 +651,175 @@
     </div>
   </footer>
 
+  <!-- Floating Report Generator Button (Bottom-Right) -->
+  <button
+    onclick="toggleReportPanel()"
+    id="btn-report-float"
+    class="fixed bottom-6 right-6 z-40 bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-2xl shadow-xl shadow-indigo-300/40 dark:shadow-indigo-900/60 transition-all active:scale-95 cursor-pointer group"
+    title="보고서 생성"
+  >
+    <i data-lucide="file-text" class="w-6 h-6 group-hover:rotate-12 transition-transform"></i>
+  </button>
+
+  <!-- Report Generator Slide Panel (Right Side) -->
+  <div id="report-panel-backdrop" class="hidden fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 z-[90]" onclick="closeReportPanel()"></div>
+  <div id="report-panel" class="fixed top-0 right-0 h-full w-[420px] max-w-full bg-white dark:bg-[#111827] border-l border-slate-200 dark:border-[#1f2937] shadow-2xl z-[95] translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+    
+    <!-- Panel Header -->
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-[#1f2937] flex items-center justify-between select-none shrink-0">
+      <div class="flex items-center gap-2">
+        <i data-lucide="file-text" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i>
+        <h2 class="font-extrabold text-slate-900 dark:text-white text-base">보고서 조회 조건</h2>
+      </div>
+      <button onclick="closeReportPanel()" class="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1f2937] rounded-lg text-slate-400 dark:text-slate-500 transition">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <!-- Panel Body (Scrollable) -->
+    <div class="flex-1 overflow-y-auto p-5 space-y-5 text-left">
+
+      <!-- STEP 1: Query Type -->
+      <div class="space-y-1.5">
+        <label class="block text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">조회 타입</label>
+        <select id="report-query-type" onchange="handleReportTypeChange()" class="w-full p-2.5 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-indigo-500 transition-colors duration-200">
+          <option value="weekly">주간</option>
+          <option value="monthly">월간</option>
+          <option value="custom">수동 (직접 입력)</option>
+        </select>
+      </div>
+
+      <!-- STEP 2: Period Selection (Dropdown for weekly/monthly) -->
+      <div id="report-period-preset-container" class="space-y-1.5">
+        <label class="block text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">기간 선택</label>
+        <select id="report-period" class="w-full p-2.5 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-indigo-500 transition-colors duration-200">
+          <!-- Populated via JS -->
+        </select>
+      </div>
+
+      <!-- STEP 2-alt: Custom Date Range (Only visible when "custom" is selected) -->
+      <div id="report-period-custom-container" class="hidden space-y-1.5 animate-fade-in">
+        <label class="block text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">기간 직접 선택</label>
+        <div class="grid grid-cols-2 gap-2">
+          <input type="date" id="report-custom-start" class="w-full p-2.5 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 transition-colors duration-200" />
+          <input type="date" id="report-custom-end" class="w-full p-2.5 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 transition-colors duration-200" />
+        </div>
+      </div>
+
+      <!-- STEP 2.5: Department Filter -->
+      <div class="space-y-1.5">
+        <label class="block text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">부서(선택)</label>
+        <select
+          id="report-dept-filter"
+          class="w-full p-2.5 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-indigo-500 transition-colors duration-200"
+        >
+          <option value="">전체 부서</option>
+          <!-- Populated dynamically via JS -->
+        </select>
+      </div>
+
+      <!-- STEP 2.6: Attendee Filter -->
+      <div class="space-y-1.5">
+        <label class="block text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">참석자(선택)</label>
+        <input
+          type="text"
+          id="report-attendee-filter"
+          placeholder="담당자 또는 참석자명 입력"
+          class="w-full p-2.5 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 transition-colors duration-200"
+        />
+      </div>
+
+      <!-- STEP 3: Query Button -->
+      <button onclick="executeReportQuery()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-sm active:scale-98 text-xs cursor-pointer">
+        <i data-lucide="search" class="w-4 h-4"></i> 일정 조회하기
+      </button>
+
+      <!-- STEP 4: Queried Preview Results -->
+      <div id="report-preview-container" class="hidden space-y-2 animate-fade-in">
+        <label class="block text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">조회 결과 미리보기</label>
+        <div id="report-preview-list" class="bg-slate-50 dark:bg-[#1a2336] border border-slate-200 dark:border-[#374151] rounded-lg p-3 max-h-[200px] overflow-y-auto text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
+          <!-- Populated via JS -->
+        </div>
+        <p id="report-preview-count" class="text-[10px] text-slate-400 font-mono">총 0건 조회됨</p>
+      </div>
+
+      <!-- STEP 5: Template Upload (only shows after query results exist) -->
+      <div id="report-download-section" class="hidden space-y-5 animate-fade-in border-t border-slate-200 dark:border-[#1f2937] pt-5">
+        
+        <div class="space-y-1.5">
+          <label class="block text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">템플릿 파일 업로드 (.hwpx)</label>
+          <input
+            type="file"
+            id="report-template-file"
+            accept=".hwpx,.docx"
+            class="w-full p-2 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 font-mono file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 dark:file:bg-indigo-950 file:text-indigo-700 dark:file:text-indigo-400 hover:file:bg-indigo-100 transition-colors duration-200"
+          />
+          <p class="text-[10px] text-slate-400 dark:text-slate-500">* 업로드하지 않으면 텍스트파일이 사용됩니다.</p>
+        </div>
+
+        <!-- STEP 6: Output Filename -->
+        <div class="space-y-1.5">
+          <label class="block text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">출력 파일명</label>
+          <input
+            type="text"
+            id="report-output-filename"
+            placeholder="2026_06_월간보고서.hwpx"
+            class="w-full p-2.5 border border-slate-200 dark:border-[#374151] bg-slate-50 dark:bg-[#1a2336] text-slate-800 dark:text-slate-100 rounded-lg text-xs font-mono focus:ring-1 focus:ring-indigo-500 transition-colors duration-200"
+          />
+        </div>
+
+        <!-- STEP 7: Preview + Download Buttons -->
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="previewReport()" class="bg-white dark:bg-[#1a2336] hover:bg-slate-50 dark:hover:bg-[#374151] border border-slate-300 dark:border-[#374151] text-slate-700 dark:text-slate-300 font-bold p-3 rounded-xl transition flex items-center justify-center gap-2 active:scale-98 text-xs cursor-pointer">
+            <i data-lucide="eye" class="w-4 h-4"></i> 미리보기
+          </button>
+          <button onclick="generateHwpxReport()" class="bg-slate-800 hover:bg-slate-900 dark:bg-indigo-700 dark:hover:bg-indigo-800 text-white font-bold p-3 rounded-xl transition flex items-center justify-center gap-2 shadow-sm active:scale-98 text-xs cursor-pointer">
+            <i data-lucide="download" class="w-4 h-4"></i> 다운로드
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Report Preview Popup Modal -->
+  <div id="report-preview-modal" class="hidden fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6 z-[110] animate-fade-in">
+    <div class="bg-white dark:bg-[#111827] rounded-2xl border border-slate-200 dark:border-[#1f2937] shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-[#1f2937] flex items-center justify-between select-none shrink-0">
+        <div class="flex items-center gap-2">
+          <i data-lucide="file-text" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i>
+          <h3 class="font-extrabold text-slate-900 dark:text-white text-sm">보고서 미리보기</h3>
+          <span id="preview-modal-badge" class="text-[10px] bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded font-bold"></span>
+        </div>
+        <button onclick="closePreviewModal()" class="p-1.5 hover:bg-slate-100 dark:hover:bg-[#1f2937] rounded-lg text-slate-400 dark:text-slate-500 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body (scrollable) -->
+      <div class="flex-1 overflow-y-auto p-6 min-h-0">
+        <pre id="report-preview-text-content" class="text-[12px] text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap leading-[1.8]"></pre>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3 border-t border-slate-200 dark:border-[#1f2937] flex items-center justify-between shrink-0 select-none">
+        <p class="text-[10px] text-slate-400 dark:text-slate-500">실제 HWPX 다운로드 시 템플릿 양식에 맞춰 생성됩니다.</p>
+        <div class="flex gap-2">
+          <button onclick="closePreviewModal()" class="px-4 py-2 border border-slate-200 dark:border-[#374151] hover:bg-slate-50 dark:hover:bg-[#1f2937] text-slate-600 dark:text-slate-400 rounded-lg text-xs font-semibold transition">
+            닫기
+          </button>
+          <button onclick="closePreviewModal(); generateHwpxReport();" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 dark:bg-indigo-700 dark:hover:bg-indigo-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i> 바로 다운로드
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- iCal Configuration Modal Window -->
   <div id="ical-modal" class="hidden fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-fade-in">
     <div class="bg-white dark:bg-[#111827] rounded-3xl p-6 max-w-md w-full border border-slate-200 dark:border-[#1f2937] shadow-xl space-y-4 text-left">
@@ -717,6 +885,8 @@
     </div>
   </div>
 
+  <!-- JSZip Library for HWPX (ZIP-based XML) template processing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <!-- Lucide Icons Library CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Load Client Side Application Script -->

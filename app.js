@@ -265,7 +265,7 @@ function renderListView(filtered) {
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass}">
               ${act.type}
             </span>
-            <span class="text-slate-400 dark:text-slate-550 font-bold font-mono text-[11px]">${formatDisplayTime(act.time)}</span>
+            ${formatDisplayTime(act.time) ? `<span class="text-slate-400 dark:text-slate-550 font-bold font-mono text-[11px]">${formatDisplayTime(act.time)}</span>` : ''}
             <div class="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-mono text-[11px]">
               <i data-lucide="calendar" class="w-3 h-3 text-slate-400 dark:text-slate-500"></i>
               <span>${act.startDate}</span>
@@ -668,7 +668,7 @@ async function handleFormSubmit(e) {
   const attendees = document.getElementById("form-attendees").value;
   const content = document.getElementById("form-content").value;
 
-  if (!start || !time || !type || !dept || !manager || !subject) {
+  if (!start || !type || !dept || !manager || !subject) {
     alert("필수 항목(* 기입)을 모두 입력해 주세요!");
     return;
   }
@@ -824,12 +824,23 @@ function navigateCalendarNext() {
 
 // Helper: format display time cleanly and handle Google Sheets December 30 1899 base epoch string dates
 function formatDisplayTime(timeStr) {
-  if (!timeStr) return "09:00";
-  const match = String(timeStr).match(/(\d{1,2}):(\d{2})/);
+  if (!timeStr) return "";
+  const s = String(timeStr).trim();
+  if (!s) return "";
+  // If it's already HH:MM format (user-entered), return as-is
+  if (/^\d{1,2}:\d{2}$/.test(s)) {
+    const parts = s.split(":");
+    return `${parts[0].padStart(2, '0')}:${parts[1]}`;
+  }
+  // If it looks like a Google Sheets date-time string, don't extract time from it
+  // (the time in "Sat Dec 30 1899 ..." is unreliable due to timezone offset artifacts)
+  if (s.includes("1899") || s.includes("GMT")) return "";
+  // Try to find HH:MM pattern in other strings
+  const match = s.match(/(\d{1,2}):(\d{2})/);
   if (match) {
     return `${match[1].padStart(2, '0')}:${match[2]}`;
   }
-  return "09:00";
+  return "";
 }
 
 // Helper: compare dates
@@ -1225,7 +1236,677 @@ function parseAndMergeIcs(icsText) {
   }
 }
 
-// 11. DARK/LIGHT THEME CONTROLLER
+// 12. REPORT GENERATOR PANEL CONTROLLER
+let reportQueriedActivities = [];
+let latestReportBlob = null;
+let latestReportFilename = "";
+
+function toggleReportPanel() {
+  const panel = document.getElementById("report-panel");
+  const backdrop = document.getElementById("report-panel-backdrop");
+  const isOpen = !panel.classList.contains("translate-x-full");
+  
+  if (isOpen) {
+    closeReportPanel();
+  } else {
+    panel.classList.remove("translate-x-full");
+    backdrop.classList.remove("hidden");
+    populateReportDeptFilter();
+    handleReportTypeChange();
+    lucide.createIcons();
+  }
+}
+
+function closeReportPanel() {
+  document.getElementById("report-panel").classList.add("translate-x-full");
+  document.getElementById("report-panel-backdrop").classList.add("hidden");
+}
+
+function populateReportDeptFilter() {
+  const select = document.getElementById("report-dept-filter");
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">전체 부서</option>';
+  
+  // Extract unique dept names from all activities
+  const depts = [...new Set(activities.map(a => (a.dept || "").trim()).filter(d => d))];
+  depts.sort();
+  depts.forEach(dept => {
+    const opt = document.createElement("option");
+    opt.value = dept;
+    opt.textContent = dept;
+    if (dept === currentVal) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function handleReportTypeChange() {
+  const type = document.getElementById("report-query-type").value;
+  const presetContainer = document.getElementById("report-period-preset-container");
+  const customContainer = document.getElementById("report-period-custom-container");
+
+  if (type === "custom") {
+    presetContainer.classList.add("hidden");
+    customContainer.classList.remove("hidden");
+  } else {
+    presetContainer.classList.remove("hidden");
+    customContainer.classList.add("hidden");
+    updateReportPeriodOptions();
+  }
+  
+  // Hide previous results when type changes
+  document.getElementById("report-preview-container").classList.add("hidden");
+  document.getElementById("report-download-section").classList.add("hidden");
+}
+
+function updateReportPeriodOptions() {
+  const type = document.getElementById("report-query-type").value;
+  const select = document.getElementById("report-period");
+  select.innerHTML = "";
+
+  const now = new Date();
+  
+  if (type === "weekly") {
+    // Generate past 4 weeks + current week + future 4 weeks (total 9 weeks)
+    const weekOptions = [];
+    for (let i = -4; i <= 4; i++) {
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - now.getDay() + 1 + (i * 7));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+
+      const startStr = formatDateStr(monday);
+      const endStr = formatDateStr(sunday);
+      const label = i === 0 ? `${startStr} ~ ${endStr} (이번 주)` : `${startStr} ~ ${endStr}`;
+      weekOptions.push({ value: `${startStr}|${endStr}`, label, isCurrent: i === 0 });
+    }
+    weekOptions.forEach(opt => {
+      const el = document.createElement("option");
+      el.value = opt.value;
+      el.textContent = opt.label;
+      if (opt.isCurrent) el.selected = true;
+      select.appendChild(el);
+    });
+  } else if (type === "monthly") {
+    // Generate last 6 months as selectable periods
+    for (let i = 0; i < 6; i++) {
+      const target = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0);
+      const startStr = formatDateStr(target);
+      const endStr = formatDateStr(lastDay);
+      const opt = document.createElement("option");
+      opt.value = `${startStr}|${endStr}`;
+      opt.textContent = `${target.getFullYear()}년 ${target.getMonth() + 1}월`;
+      select.appendChild(opt);
+    }
+  }
+}
+
+function formatDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getReportPeriod() {
+  const type = document.getElementById("report-query-type").value;
+  
+  if (type === "custom") {
+    const startStr = document.getElementById("report-custom-start").value;
+    const endStr = document.getElementById("report-custom-end").value;
+    if (!startStr || !endStr) {
+      alert("시작일과 종료일을 모두 선택해 주세요.");
+      return null;
+    }
+    if (startStr > endStr) {
+      alert("시작일이 종료일보다 늦을 수 없습니다.");
+      return null;
+    }
+    return { startStr, endStr };
+  } else {
+    const periodVal = document.getElementById("report-period").value;
+    if (!periodVal) {
+      alert("기간을 선택해 주세요.");
+      return null;
+    }
+    const [startStr, endStr] = periodVal.split("|");
+    return { startStr, endStr };
+  }
+}
+
+function executeReportQuery() {
+  const period = getReportPeriod();
+  if (!period) return;
+  const { startStr, endStr } = period;
+  const deptFilter = (document.getElementById("report-dept-filter")?.value || "").trim();
+  const attendeeFilter = (document.getElementById("report-attendee-filter")?.value || "").trim().toLowerCase();
+
+  reportQueriedActivities = activities.filter(act => {
+    const d = safeParseDate(act.startDate);
+    if (!d) return false;
+    const ds = formatDateStr(d);
+    if (ds < startStr || ds > endStr) return false;
+    
+    if (deptFilter && (act.dept || "").trim() !== deptFilter) return false;
+    
+    if (attendeeFilter) {
+      const searchTarget = `${act.manager} ${act.attendees} ${act.dept}`.toLowerCase();
+      if (!searchTarget.includes(attendeeFilter)) return false;
+    }
+    return true;
+  });
+
+  // Sort by date ascending
+  reportQueriedActivities.sort((a, b) => {
+    const da = safeParseDate(a.startDate)?.getTime() || 0;
+    const db = safeParseDate(b.startDate)?.getTime() || 0;
+    return da - db;
+  });
+
+  // Show preview
+  const container = document.getElementById("report-preview-container");
+  const list = document.getElementById("report-preview-list");
+  const countEl = document.getElementById("report-preview-count");
+  const downloadSection = document.getElementById("report-download-section");
+
+  container.classList.remove("hidden");
+
+  if (reportQueriedActivities.length === 0) {
+    list.innerHTML = `<p class="text-slate-400 text-center py-4">해당 기간에 조회된 일정이 없습니다.</p>`;
+    downloadSection.classList.add("hidden");
+  } else {
+    list.innerHTML = reportQueriedActivities.map(act => {
+      const typeColor = act.type === "대외" ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400";
+      return `<div class="flex items-center gap-2 py-1 border-b border-slate-100 dark:border-[#1f2937] last:border-0">
+        <span class="text-[10px] font-bold ${typeColor} w-6 shrink-0">${act.type || ''}</span>
+        <span class="text-slate-500 dark:text-slate-400 font-mono text-[10px] w-20 shrink-0">${act.startDate || ''}</span>
+        <span class="truncate font-semibold text-slate-800 dark:text-slate-200">[${act.dept || ''}] ${act.subject || ''}</span>
+      </div>`;
+    }).join("");
+    
+    // Show download section
+    downloadSection.classList.remove("hidden");
+    
+    // Auto-fill output filename based on query type
+    const type = document.getElementById("report-query-type").value;
+    const fnTypeLabel = type === "weekly" ? "주간" : type === "monthly" ? "월간" : "기간별";
+    const filenameInput = document.getElementById("report-output-filename");
+    filenameInput.value = `${startStr.replace(/-/g, '_')}_${fnTypeLabel}보고서.hwpx`;
+  }
+
+  countEl.innerText = `총 ${reportQueriedActivities.length}건 조회됨`;
+  lucide.createIcons();
+}
+
+async function generateHwpxReport() {
+  if (reportQueriedActivities.length === 0) {
+    alert("먼저 '일정 조회하기'를 실행하여 보고서에 포함할 일정을 조회해 주세요.");
+    return;
+  }
+
+  const queryType = document.getElementById("report-query-type").value;
+  const period = getReportPeriod();
+  if (!period) return;
+  const { startStr, endStr } = period;
+  const customFilename = document.getElementById("report-output-filename").value.trim();
+  const typeLabel = queryType === "weekly" ? "주간" : queryType === "monthly" ? "월간" : "기간별";
+  const templateFile = document.getElementById("report-template-file").files[0];
+  const selectedDept = (document.getElementById("report-dept-filter")?.value || "").trim();
+
+  // Format period display for the header cells
+  const periodStartDisplay = `(${startStr.substring(5).replace('-', '. ')}.`;
+  const periodEndDisplay = `${endStr.substring(5).replace('-', '. ')}.)`;
+  // ───────────────────────────────────────────────
+  // CASE 1: HWPX Template
+  // ───────────────────────────────────────────────
+  if (templateFile && templateFile.name.endsWith(".hwpx")) {
+    try {
+      const templateZip = await JSZip.loadAsync(templateFile);
+      let totalReplacements = 0;
+      let foundFields = new Set();
+
+      // Group activities by department
+      let deptGroups;
+      if (selectedDept) {
+        // Single department selected
+        deptGroups = [{ dept: selectedDept, acts: reportQueriedActivities }];
+      } else {
+        // "전체 부서" → group by dept, each gets its own page
+        const deptMap = {};
+        reportQueriedActivities.forEach(act => {
+          const d = (act.dept || "미지정").trim();
+          if (!deptMap[d]) deptMap[d] = [];
+          deptMap[d].push(act);
+        });
+        deptGroups = Object.entries(deptMap).map(([dept, acts]) => ({ dept, acts }));
+      }
+
+      // Read original section0.xml as the master template
+      let masterContent = null;
+      let sectionFileName = null;
+      const fileNames = Object.keys(templateZip.files);
+      for (const fn of fileNames) {
+        if (fn.includes("section") && fn.endsWith(".xml")) {
+          masterContent = await templateZip.files[fn].async("string");
+          sectionFileName = fn;
+          break;
+        }
+      }
+
+      if (!masterContent || !sectionFileName) {
+        alert("HWPX 템플릿에서 section XML을 찾지 못했습니다.");
+        return;
+      }
+
+      // For multiple departments, we'll build the full content by repeating the table for each dept
+      let finalContent = masterContent;
+      const blockStartMarker = 'name="번호"';
+      const blockEndMarker = '등등,,,';
+
+      // Find the ENTIRE table (from <hp:tbl to </hp:tbl>) that contains the repeating block
+      const tblStart = masterContent.lastIndexOf('<hp:tbl', masterContent.indexOf(blockStartMarker));
+      const tblEnd = masterContent.indexOf('</hp:tbl>', masterContent.indexOf(blockEndMarker));
+      const tblEndFull = tblEnd !== -1 ? tblEnd + '</hp:tbl>'.length : -1;
+
+      if (tblStart !== -1 && tblEndFull !== -1) {
+        const masterTable = masterContent.substring(tblStart, tblEndFull);
+        
+        let allTablesOutput = "";
+
+        deptGroups.forEach((group, groupIdx) => {
+          let tableXml = masterTable;
+
+          // ─── Replace header cells for this department ───
+          const cellReplacements = {
+            "부서": group.dept,
+            "시작일": periodStartDisplay,
+            "종료일": periodEndDisplay,
+            "조회 타입": typeLabel + "업무",
+          };
+          
+          for (const [cellName, cellValue] of Object.entries(cellReplacements)) {
+            // Find tc with this name, then replace the first <hp:t>...</hp:t> inside it
+            const tcMarker = `name="${cellName}"`;
+            const tcIdx = tableXml.indexOf(tcMarker);
+            if (tcIdx !== -1) {
+              const tStart = tableXml.indexOf('<hp:t>', tcIdx);
+              const tEnd = tableXml.indexOf('</hp:t>', tStart);
+              if (tStart !== -1 && tEnd !== -1) {
+                tableXml = tableXml.substring(0, tStart + '<hp:t>'.length) + escapeXml(cellValue) + tableXml.substring(tEnd);
+                totalReplacements++;
+                foundFields.add(`셀:${cellName}`);
+              }
+            }
+          }
+
+          // ─── Find and replace the repeating block inside this table ───
+          if (tableXml.includes(blockStartMarker) && tableXml.includes(blockEndMarker)) {
+            const fieldIdx = tableXml.indexOf(blockStartMarker);
+            let pStart = tableXml.lastIndexOf('<hp:p ', fieldIdx);
+            const etcIdx = tableXml.indexOf(blockEndMarker);
+            let pEnd = tableXml.indexOf('</hp:p>', etcIdx);
+            if (pEnd !== -1) pEnd += '</hp:p>'.length;
+
+            if (pStart !== -1 && pEnd !== -1 && pStart < pEnd) {
+              const templateBlock = tableXml.substring(pStart, pEnd);
+
+              // Split into 내부 and 대외 within this dept group
+              const internalActs = group.acts.filter(a => String(a.type).trim() !== "대외");
+              const externalActs = group.acts.filter(a => String(a.type).trim() === "대외");
+
+              let allBlocks = "";
+              let globalNum = 1;
+              const idOffset = groupIdx * 10000;
+
+              // Helper to fill one block
+              // Helper: build date display string
+              function buildDateDisplay(act) {
+                let dateStr = act.startDate || "";
+                if (act.endDate && act.endDate !== act.startDate) {
+                  dateStr += "~" + act.endDate;
+                }
+                const timeStr = formatDisplayTime(act.time);
+                if (timeStr && timeStr !== "00:00") {
+                  dateStr += " " + timeStr;
+                }
+                return dateStr;
+              }
+
+              // Helper: empty paragraph for spacing between items
+              const spacerP = `<hp:p id="0" paraPrIDRef="77" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="60"/><hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1300" textheight="1300" baseline="1105" spacing="428" horzpos="0" horzsize="46604" flags="393216"/></hp:linesegarray></hp:p>`;
+
+              function fillBlock(block, act, num, hideNumber) {
+                const dateDisplay = buildDateDisplay(act);
+                
+                // CRITICAL: Replace 번호 by directly finding the original "<hp:t>1</hp:t>" value
+                // in the 번호 field and the ". " that follows it, then merge into 제목
+                // The template has: [번호 field]<hp:t>1</hp:t>[fieldEnd]<hp:t>. </hp:t>[제목 field]<hp:t>제목</hp:t>
+                // We want: [번호 field]<hp:t>N</hp:t>[fieldEnd]<hp:t>. </hp:t>[제목 field]<hp:t>실제제목</hp:t>
+                
+                // Step 1: Replace the 번호 field's <hp:t>1</hp:t> with the actual number
+                // Find the exact pattern in the original template: after 번호's fieldBegin close, <hp:t>1</hp:t>
+                const numValue = hideNumber ? " " : String(num);
+                
+                // Direct string replacement: find "</hp:fieldBegin></hp:ctrl><hp:t>1</hp:t>" and replace the "1"
+                const origNumPattern = '</hp:fieldBegin></hp:ctrl><hp:t>1</hp:t>';
+                const newNumPattern = `</hp:fieldBegin></hp:ctrl><hp:t>${escapeXml(numValue)}</hp:t>`;
+                if (block.includes(origNumPattern)) {
+                  block = block.replace(origNumPattern, newNumPattern);
+                  foundFields.add("번호");
+                  totalReplacements++;
+                }
+                
+                // Step 2: Replace other fields normally
+                const fields = {
+                  "제목": act.subject || "",
+                  "담당자": act.manager || "",
+                  "내용": act.content || "",
+                  "장소": act.location || "",
+                  "시작일": dateDisplay,
+                  "참석자": act.attendees || "",
+                };
+                
+                for (const [fn, fv] of Object.entries(fields)) {
+                  block = replaceHwpxField(block, fn, fv);
+                  if (fv.trim()) {
+                    foundFields.add(fn);
+                    totalReplacements++;
+                  }
+                }
+                // Remove "등등,,,"
+                block = block.replace(/<hp:p[^>]*>[^<]*<hp:run[^>]*><hp:t>[^<]*등등[^<]*<\/hp:t>.*?<\/hp:p>/g, '');
+                // Remove empty-value lines
+                const emptyCheck = ["장소", "참석자", "내용", "시작일"];
+                for (const fn of emptyCheck) {
+                  if (!fields[fn]) {
+                    block = block.replace(new RegExp(`<hp:p[^>]*>(?:(?!</hp:p>).)*name="${escapeRegex(fn)}"(?:(?!</hp:p>).)*</hp:p>`, 'gs'), '');
+                  }
+                }
+                // Unique IDs
+                const offset = idOffset + num * 100;
+                block = block.replace(/id="(\d+)"/g, (m, id) => `id="${parseInt(id) + offset}"`);
+                block = block.replace(/beginIDRef="(\d+)"/g, (m, id) => `beginIDRef="${parseInt(id) + offset}"`);
+                return block;
+              }
+
+              // 내부 activities
+              internalActs.forEach((act, idx) => {
+                if (idx > 0) allBlocks += spacerP; // Spacing between items
+                allBlocks += fillBlock(templateBlock, act, globalNum, false);
+                globalNum++;
+              });
+
+              // 대외 activities - same format as internal, appended after
+              externalActs.forEach((act, idx) => {
+                if (internalActs.length > 0 || idx > 0) allBlocks += spacerP; // Spacing between items
+                allBlocks += fillBlock(templateBlock, act, globalNum, false);
+                globalNum++;
+              });
+
+              tableXml = tableXml.substring(0, pStart) + allBlocks + tableXml.substring(pEnd);
+            }
+          }
+
+          // ─── Remove the static "대내외 협력 및 성과확산" template section ───
+          // Always remove - if external acts exist, it was dynamically generated above
+          const staticSectionRegex = /<hp:p[^>]*>[^<]*<hp:run[^>]*><hp:t>[^<]*대내외 협력[^<]*<\/hp:t>.*?<\/hp:p>/gs;
+          tableXml = tableXml.replace(staticSectionRegex, '');
+          tableXml = tableXml.replace(/<hp:p[^>]*>(?:(?!<\/hp:p>).)*❍ 제목(?:(?!<\/hp:p>).)*<\/hp:p>/gs, '');
+          tableXml = tableXml.replace(/<hp:p[^>]*>(?:(?!<\/hp:p>).)*\* 내용(?:(?!<\/hp:p>).)*<\/hp:p>/gs, '');
+          tableXml = tableXml.replace(/<hp:p[^>]*>(?:(?!<\/hp:p>).)*\* 등등(?:(?!<\/hp:p>).)*<\/hp:p>/gs, '');
+
+          // Add page break before each department table (except the first)
+          if (groupIdx > 0) {
+            allTablesOutput += `<hp:p id="0" paraPrIDRef="0" styleIDRef="0" pageBreak="1" columnBreak="0" merged="0"><hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="0" flags="393216"/></hp:linesegarray></hp:p>`;
+          }
+          allTablesOutput += tableXml;
+        });
+
+        // Replace original table in master content with all department tables
+        finalContent = masterContent.substring(0, tblStart) + allTablesOutput + masterContent.substring(tblEndFull);
+      }
+
+      // ─── Replace any remaining header CLICK_HERE fields ───
+      const headerClickFields = {
+        "기간": `${startStr} ~ ${endStr}`,
+        "조회타입": typeLabel,
+        "총건수": String(reportQueriedActivities.length),
+        "생성일": formatDateStr(new Date()),
+      };
+      for (const [fn, fv] of Object.entries(headerClickFields)) {
+        const newFinal = replaceHwpxField(finalContent, fn, fv);
+        if (newFinal !== finalContent) {
+          finalContent = newFinal;
+          totalReplacements++;
+          foundFields.add(fn);
+        }
+      }
+
+      // Write back to ZIP
+      templateZip.file(sectionFileName, finalContent);
+
+      const outputBlob = await templateZip.generateAsync({ type: "blob", mimeType: "application/octet-stream" });
+      const defaultFilename = customFilename || `${startStr.replace(/-/g, '_')}_${typeLabel}보고서.hwpx`;
+
+      latestReportBlob = outputBlob;
+      latestReportFilename = defaultFilename;
+      triggerBlobDownload(outputBlob, defaultFilename);
+
+      // No alert popup - just download silently
+
+    } catch (err) {
+      console.error("HWPX template processing failed:", err);
+      alert("HWPX 템플릿 처리 중 오류: " + err.message + "\n\n기본 텍스트 보고서로 대체 생성합니다.");
+      generateTextReport(startStr, endStr, typeLabel, customFilename);
+    }
+    return;
+  }
+
+  // ───────────────────────────────────────────────
+  // CASE 2: No user template uploaded → Try to load default built-in template
+  // ───────────────────────────────────────────────
+  try {
+    const defaultTemplateRes = await fetch('결과보고 양식_v2.hwpx');
+    if (defaultTemplateRes.ok) {
+      const defaultBlob = await defaultTemplateRes.blob();
+      // Create a synthetic File object and re-trigger with the default template
+      const defaultFile = new File([defaultBlob], '결과보고 양식_v2.hwpx');
+      
+      // Temporarily set the template file input
+      const dt = new DataTransfer();
+      dt.items.add(defaultFile);
+      document.getElementById("report-template-file").files = dt.files;
+      
+      // Re-call this function (now templateFile will be set)
+      return generateHwpxReport();
+    }
+  } catch (e) {
+    console.log("Default template not available, falling back to text report");
+  }
+  
+  generateTextReport(startStr, endStr, typeLabel, customFilename);
+}
+
+// Replace a HWPX CLICK_HERE field value using safe string-based search
+function replaceHwpxField(xml, fieldName, newValue) {
+  let result = xml;
+  let searchFrom = 0;
+  const escapedValue = escapeXml(newValue);
+  
+  while (true) {
+    // Find: type="CLICK_HERE" name="fieldName" (the actual field declaration)
+    const searchStr = `type="CLICK_HERE" name="${fieldName}"`;
+    const fieldIdx = result.indexOf(searchStr, searchFrom);
+    if (fieldIdx === -1) break;
+    
+    // Find the closing </hp:fieldBegin></hp:ctrl> after this field
+    const closeTag = '</hp:fieldBegin></hp:ctrl>';
+    const fieldBeginClose = result.indexOf(closeTag, fieldIdx);
+    if (fieldBeginClose === -1) break;
+    const afterClose = fieldBeginClose + closeTag.length;
+    
+    // Find the next <hp:t> tag after the field close (should be within ~10 chars)
+    const tOpenTag = '<hp:t>';
+    const tCloseTag = '</hp:t>';
+    const tStart = result.indexOf(tOpenTag, afterClose);
+    if (tStart === -1 || tStart > afterClose + 10) {
+      searchFrom = afterClose;
+      continue;
+    }
+    const tEnd = result.indexOf(tCloseTag, tStart);
+    if (tEnd === -1) break;
+    
+    // Replace the content between <hp:t> and </hp:t>
+    result = result.substring(0, tStart + tOpenTag.length) + escapedValue + result.substring(tEnd);
+    searchFrom = tStart + tOpenTag.length + escapedValue.length + tCloseTag.length;
+  }
+  
+  return result;
+}
+
+function escapeXml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// Preview report as text in the panel
+function previewReport() {
+  if (reportQueriedActivities.length === 0) {
+    alert("먼저 '일정 조회하기'를 실행해 주세요.");
+    return;
+  }
+  const period = getReportPeriod();
+  if (!period) return;
+  const { startStr, endStr } = period;
+  const queryType = document.getElementById("report-query-type").value;
+  const typeLabel = queryType === "weekly" ? "주간" : queryType === "monthly" ? "월간" : "기간별";
+  const selectedDept = (document.getElementById("report-dept-filter")?.value || "").trim();
+
+  // Group by dept
+  let deptGroups;
+  if (selectedDept) {
+    deptGroups = [{ dept: selectedDept, acts: reportQueriedActivities }];
+  } else {
+    const deptMap = {};
+    reportQueriedActivities.forEach(act => {
+      const d = (act.dept || "미지정").trim();
+      if (!deptMap[d]) deptMap[d] = [];
+      deptMap[d].push(act);
+    });
+    deptGroups = Object.entries(deptMap).map(([dept, acts]) => ({ dept, acts }));
+  }
+
+  let preview = "";
+  deptGroups.forEach((group, gi) => {
+    if (gi > 0) preview += "\n━━━━━━━━━━━━━━━━━━━━━ (페이지 구분) ━━━━━━━━━━━━━━━━━━━━━\n\n";
+    const periodDisp = `(${startStr.substring(5).replace('-', '. ')}. ~ ${endStr.substring(5).replace('-', '. ')}.)`;
+    preview += `${group.dept}  ${periodDisp}  ${typeLabel}업무\n\n`;
+
+    const internalActs = group.acts.filter(a => String(a.type).trim() !== "대외");
+    const externalActs = group.acts.filter(a => String(a.type).trim() === "대외");
+    let num = 1;
+
+    internalActs.forEach(act => {
+      preview += `${num}. ${act.subject || ""}(${act.manager || ""})\n`;
+      if (act.content) preview += `  ❍ ${act.content}\n`;
+      if (act.location) preview += `    * 장 소: ${act.location}\n`;
+      let dateDisp = act.startDate || "";
+      if (act.endDate && act.endDate !== act.startDate) dateDisp += "~" + act.endDate;
+      const timeDisp = formatDisplayTime(act.time);
+      if (timeDisp) dateDisp += " " + timeDisp;
+      if (dateDisp) preview += `    * 일 정: ${dateDisp}\n`;
+      if (act.attendees) preview += `    * 참석자: ${act.attendees}\n`;
+      preview += "\n";
+      num++;
+    });
+
+    externalActs.forEach(act => {
+      preview += `${num}. ${act.subject || ""}(${act.manager || ""})\n`;
+      if (act.content) preview += `  ❍ ${act.content}\n`;
+      if (act.location) preview += `    * 장 소: ${act.location}\n`;
+      let dateDisp = act.startDate || "";
+      if (act.endDate && act.endDate !== act.startDate) dateDisp += "~" + act.endDate;
+      const timeDisp = formatDisplayTime(act.time);
+      if (timeDisp) dateDisp += " " + timeDisp;
+      if (dateDisp) preview += `    * 일 정: ${dateDisp}\n`;
+      if (act.attendees) preview += `    * 참석자: ${act.attendees}\n`;
+      preview += "\n";
+      num++;
+    });
+  });
+
+  // Show in popup modal
+  const badge = document.getElementById("preview-modal-badge");
+  badge.textContent = `${typeLabel} · ${reportQueriedActivities.length}건 · ${deptGroups.length}개 부서`;
+  
+  document.getElementById("report-preview-text-content").textContent = preview;
+  document.getElementById("report-preview-modal").classList.remove("hidden");
+  lucide.createIcons();
+}
+
+function closePreviewModal() {
+  document.getElementById("report-preview-modal").classList.add("hidden");
+}
+
+function generateTextReport(startStr, endStr, typeLabel, customFilename) {
+  let reportContent = "";
+  reportContent += `=====================================\n`;
+  reportContent += `  ${typeLabel} 일정 보고서\n`;
+  reportContent += `  기간: ${startStr} ~ ${endStr}\n`;
+  reportContent += `  생성일시: ${new Date().toLocaleString("ko-KR")}\n`;
+  reportContent += `  총 ${reportQueriedActivities.length}건\n`;
+  reportContent += `=====================================\n\n`;
+
+  reportContent += `번호\t시작일\t종료일\t시간\t유형\t부서\t담당자\t전화번호\t제목\t장소\t참석자\t내용\n`;
+  reportContent += `─────────────────────────────────────────────────────\n`;
+
+  reportQueriedActivities.forEach((act, idx) => {
+    reportContent += `${idx + 1}\t${act.startDate}\t${act.endDate || act.startDate}\t${formatDisplayTime(act.time)}\t${act.type}\t${act.dept}\t${act.manager}\t${act.phone}\t${act.subject}\t${act.location}\t${act.attendees}\t${act.content}\n`;
+  });
+
+  reportContent += `\n─────────────────────────────────────────────────────\n`;
+  reportContent += `[끝] 이상 ${reportQueriedActivities.length}건의 보고 일정입니다.\n`;
+
+  const defaultFilename = customFilename || `${startStr.replace(/-/g, '_')}_${typeLabel}보고서.txt`;
+  const blob = new Blob(["\uFEFF" + reportContent], { type: "text/plain;charset=utf-8;" });
+  
+  latestReportBlob = blob;
+  latestReportFilename = defaultFilename;
+
+  triggerBlobDownload(blob, defaultFilename);
+  // No alert - silent download
+}
+
+function downloadLatestReport() {
+  if (!latestReportBlob) {
+    alert("아직 생성된 보고서가 없습니다.");
+    return;
+  }
+  const url = URL.createObjectURL(latestReportBlob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = latestReportFilename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// 13. DARK/LIGHT THEME CONTROLLER
 function toggleDarkMode() {
   const isDark = document.documentElement.classList.toggle("dark");
   localStorage.setItem("standalone_theme", isDark ? "dark" : "light");
@@ -1260,7 +1941,7 @@ function loadThemePreference() {
   updateThemeIcons(useDark);
 }
 
-// 12. INITIALIZATION EVENT TRIGGER
+// 14. INITIALIZATION EVENT TRIGGER
 function refreshData() {
   initDatabase();
   renderMainApp();

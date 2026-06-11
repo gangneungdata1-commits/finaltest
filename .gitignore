@@ -1,0 +1,10 @@
+node_modules/
+*.log
+.DS_Store
+
+# 한글 문서
+*.hwp
+*.hwpx
+
+# Claude
+.claude/
