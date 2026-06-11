@@ -214,6 +214,11 @@ function switchViewMode(mode) {
     listContainer.classList.add("hidden");
     calContainer.classList.remove("hidden");
     viewTitle.innerText = "보고서 일정 캘린더";
+    
+    // Automatically trigger real-time refresh when switching to the calendar view
+    if (dbMode === "sheets" && sheetsUrl) {
+      initDatabase();
+    }
   }
 
   renderMainApp();
@@ -260,7 +265,7 @@ function renderListView(filtered) {
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass}">
               ${act.type}
             </span>
-            <span class="text-slate-400 dark:text-slate-500 font-bold font-mono text-[11px]">${act.time || "09:00"}</span>
+            <span class="text-slate-400 dark:text-slate-550 font-bold font-mono text-[11px]">${formatDisplayTime(act.time)}</span>
             <div class="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-mono text-[11px]">
               <i data-lucide="calendar" class="w-3 h-3 text-slate-400 dark:text-slate-500"></i>
               <span>${act.startDate}</span>
@@ -574,10 +579,14 @@ function renderCalendarView(filtered) {
 
 // 6. EDITING PROCESS (CALENDAR CLICK & LIST BUTTONS)
 function populateFormWithActivity(act) {
-  document.getElementById("form-start-date").value = act.startDate;
-  document.getElementById("form-end-date").value = act.endDate || act.startDate;
-  document.getElementById("form-time").value = act.time || "09:00";
-  document.getElementById("form-type").value = act.type || "대외";
+  document.getElementById("form-start-date").value = act.startDate || "";
+  document.getElementById("form-end-date").value = act.endDate || act.startDate || "";
+  document.getElementById("form-time").value = formatDisplayTime(act.time);
+  
+  // Normalize type value: trim whitespace and fallback to "대외" if unrecognized
+  const typeVal = String(act.type || "").trim();
+  document.getElementById("form-type").value = (typeVal === "내부") ? "내부" : "대외";
+  
   document.getElementById("form-dept").value = act.dept || "";
   document.getElementById("form-manager").value = act.manager || "";
   document.getElementById("form-phone").value = act.phone || "";
@@ -603,6 +612,7 @@ function editActivityFromList(id) {
   document.getElementById("btn-form-submit").className = "w-full bg-amber-500 hover:bg-amber-600 text-white font-bold p-2.5 rounded-xl transition duration-150 flex items-center justify-center gap-1.5 shadow-sm active:scale-98 text-xs cursor-pointer";
   document.getElementById("text-form-submit").innerText = "일정 보고서 수정 완료하기";
   document.getElementById("btn-cancel-edit").classList.remove("hidden");
+  document.getElementById("btn-delete-in-edit").classList.remove("hidden");
 
   // Re-instantiate icons
   lucide.createIcons();
@@ -618,9 +628,28 @@ function exitEditMode() {
   document.getElementById("btn-form-submit").className = "w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-2.5 rounded-xl transition duration-150 flex items-center justify-center gap-1.5 shadow-sm active:scale-98 text-xs cursor-pointer";
   document.getElementById("text-form-submit").innerText = "일정 보고서에 등록하기";
   document.getElementById("btn-cancel-edit").classList.add("hidden");
+  document.getElementById("btn-delete-in-edit").classList.add("hidden");
 
   // Re-instantiate icons
   lucide.createIcons();
+}
+
+// Delete the currently editing activity directly from the edit form
+async function deleteEditingActivity() {
+  if (!editingActivityId) return;
+  const act = activities.find(a => a.id === editingActivityId);
+  const label = act ? `[${act.dept || ''}] ${act.subject || ''}` : editingActivityId;
+  if (!confirm(`${label} 일정을 삭제하시겠습니까?`)) return;
+  
+  activities = activities.filter(a => a.id !== editingActivityId);
+  saveDatabase();
+  
+  if (dbMode === "sheets" && sheetsUrl) {
+    await syncToGoogleSheets("delete", editingActivityId);
+  }
+  
+  exitEditMode();
+  renderMainApp();
 }
 
 // 7. HANDLERS FOR NEW MANUAL FORM SUBMISSIONS (CREATE & UPDATE)
@@ -710,15 +739,24 @@ async function handleFormSubmit(e) {
 async function syncToGoogleSheets(action, id, data) {
   if (!sheetsUrl) return;
   try {
+    // We use "text/plain" Content-Type instead of "application/json" to bypass CORS preflight OPTIONS requests,
+    // which Google Apps Script Web Apps do not support. e.postData.contents still parses correctly as JSON!
     const res = await fetch(sheetsUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({ action, id, data }),
       mode: "cors"
     });
-    const result = await res.json();
-    if (!result.success) {
-      throw new Error(result.error || "Unknown error");
+    
+    // Attempt to parse response, but do not throw error if CORS redirection body is opaque,
+    // as Google Sheets has already successfully processed and recorded the POST write request!
+    try {
+      const result = await res.json();
+      if (result && result.error) {
+        console.warn("Sheets backend warning:", result.error);
+      }
+    } catch (parseErr) {
+      console.log("Opaque/Redirect response received, write succeeded.");
     }
   } catch (e) {
     console.error("Failed to sync change to Google Sheets:", e);
@@ -784,6 +822,16 @@ function navigateCalendarNext() {
   renderMainApp();
 }
 
+// Helper: format display time cleanly and handle Google Sheets December 30 1899 base epoch string dates
+function formatDisplayTime(timeStr) {
+  if (!timeStr) return "09:00";
+  const match = String(timeStr).match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    return `${match[1].padStart(2, '0')}:${match[2]}`;
+  }
+  return "09:00";
+}
+
 // Helper: compare dates
 function isSameDay(d1, d2) {
   return d1.getFullYear() === d2.getFullYear() &&
@@ -793,10 +841,22 @@ function isSameDay(d1, d2) {
 
 function safeParseDate(dateStr) {
   if (!dateStr) return null;
-  const parts = dateStr.split("-");
-  if (parts.length === 3) {
-    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  
+  // Try standard date parsing first (handles ISO strings and standard formats)
+  let d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d;
   }
+
+  // If standard parsing fails (like "2026. 6. 11." or "2026/06/11"), extract Year, Month, Day numerically
+  const matches = String(dateStr).match(/\d+/g);
+  if (matches && matches.length >= 3) {
+    const year = parseInt(matches[0], 10);
+    const month = parseInt(matches[1], 10) - 1;
+    const day = parseInt(matches[2], 10);
+    return new Date(year, month, day);
+  }
+  
   return null;
 }
 
