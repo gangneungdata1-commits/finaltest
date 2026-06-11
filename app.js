@@ -1,47 +1,7 @@
 // Standalone Client-Side Application Logic for Expert Activity Tracker (User Version)
 
-// 1. DEFAULT SEED DATA
-const DEFAULT_ACTIVITIES = [
-  {
-    id: "act_init1",
-    startDate: "2026-06-09",
-    endDate: "2026-06-11",
-    type: "자문/컨설팅",
-    name: "김민재",
-    org: "한국지능정보사회진흥원",
-    subject: "AI 행정 혁신 구축 기술 표준 자문",
-    targetOrg: "행정안전부",
-    attendees: "12명",
-    memo: "클라우드 기반 협업 도구 설계 가이드라인 제공",
-    createdAt: "2026-06-09T09:00:00.000Z"
-  },
-  {
-    id: "act_init2",
-    startDate: "2026-06-10",
-    endDate: "2026-06-10",
-    type: "강의",
-    name: "박서연",
-    org: "서울대학교",
-    subject: "생성형 AI 시대의 전문 행정 전략 특강",
-    targetOrg: "중앙공무원교육원",
-    attendees: "50명",
-    memo: "공무원 혁신 역량 강화 비대면 원격 교육",
-    createdAt: "2026-06-10T10:30:00.000Z"
-  },
-  {
-    id: "act_init3",
-    startDate: "2026-06-11",
-    endDate: "2026-06-12",
-    type: "평가/심사",
-    name: "이승우",
-    org: "소방청",
-    subject: "2026 국가 소방 안전 디지털 플랫폼 기술 평가",
-    targetOrg: "한국정보통신협회",
-    attendees: "7명",
-    memo: "제1회의실 현장 대면 심사 진행",
-    createdAt: "2026-06-11T14:00:00.000Z"
-  }
-];
+// 1. DEFAULT SEED DATA (MAPPED TO THE NEW SCHEME)
+const DEFAULT_ACTIVITIES = [];
 
 // 2. STATE STORAGE MANAGEMENT
 let activities = [];
@@ -58,6 +18,29 @@ function initDatabase() {
   if (localData) {
     try {
       activities = JSON.parse(localData);
+      
+      // Filter out any old mock seed data starting with "act_init" so the user starts completely empty!
+      activities = activities.filter(act => act.id && !act.id.startsWith("act_init"));
+      
+      // Automatic Schema Migration: Upgrades any old activities stored in the user's browser
+      activities = activities.map(act => {
+        return {
+          id: act.id || "act_" + Math.random().toString(36).substring(2, 11),
+          startDate: act.startDate || "",
+          endDate: act.endDate || act.startDate || "",
+          time: act.time || "09:00",
+          type: act.type === "내부" || act.type === "대외" ? act.type : (act.type === "회의" ? "내부" : "대외"),
+          dept: act.dept || act.org || "기획조정실",
+          manager: act.manager || act.name || "담당자",
+          phone: act.phone || "",
+          subject: act.subject || "일정 제목",
+          location: act.location || act.targetOrg || "회의실",
+          attendees: act.attendees || "",
+          content: act.content || act.memo || "",
+          createdAt: act.createdAt || new Date().toISOString()
+        };
+      });
+      saveDatabase();
     } catch (e) {
       console.error("Failed to parse localStorage data, seeding default instead", e);
       activities = [...DEFAULT_ACTIVITIES];
@@ -103,17 +86,20 @@ function renderMainApp() {
 
 function calculateKPIs() {
   const total = activities.length;
-  const eduCount = activities.filter(a => a.type === "교육" || a.type === "강의").length;
-  const consultCount = activities.filter(a => a.type === "자문/컨설팅").length;
-  const auditCount = activities.filter(a => a.type === "평가/심사" || a.type === "연구" || a.type === "회의").length;
+  const externalCount = activities.filter(a => a.type === "대외").length;
+  const internalCount = activities.filter(a => a.type === "내부").length;
+
+  // Upcoming events (today and future)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const upcomingCount = activities.filter(a => (a.startDate >= "2026-06-11")).length;
 
   document.getElementById("kpi-total").innerText = `${total}건`;
   
-  const eduRatio = total > 0 ? Math.round((eduCount / total) * 100) : 0;
-  document.getElementById("kpi-edu-ratio").innerHTML = `${eduRatio}% <span class="text-[10px] text-slate-400 font-normal ml-1">(${eduCount}건)</span>`;
+  const extRatio = total > 0 ? Math.round((externalCount / total) * 100) : 0;
+  document.getElementById("kpi-external-ratio").innerHTML = `${extRatio}% <span class="text-[10px] text-slate-400 font-normal ml-1">(${externalCount}건)</span>`;
   
-  document.getElementById("kpi-consult").innerText = `${consultCount}건`;
-  document.getElementById("kpi-audit").innerText = `${auditCount}건`;
+  document.getElementById("kpi-internal").innerText = `${internalCount}건`;
+  document.getElementById("kpi-upcoming").innerText = `${upcomingCount}건`;
 }
 
 function filterActivitiesList() {
@@ -122,7 +108,7 @@ function filterActivitiesList() {
     const cleanSearch = searchTerm.toLowerCase().trim();
     if (!cleanSearch) return typeMatch;
 
-    const targetStr = `${act.name} ${act.org} ${act.subject} ${act.targetOrg} ${act.memo}`.toLowerCase();
+    const targetStr = `${act.manager} ${act.dept} ${act.subject} ${act.location} ${act.content} ${act.phone}`.toLowerCase();
     const textMatch = targetStr.includes(cleanSearch);
     return typeMatch && textMatch;
   });
@@ -155,13 +141,13 @@ function switchViewMode(mode) {
     btnCal.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800";
     listContainer.classList.remove("hidden");
     calContainer.classList.add("hidden");
-    viewTitle.innerText = "활동기록 리스트현황";
+    viewTitle.innerText = "보고서 일정 리스트";
   } else {
     btnList.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800";
     btnCal.className = "p-1 rounded-md transition-all bg-white text-blue-600 shadow-xs font-bold";
     listContainer.classList.add("hidden");
     calContainer.classList.remove("hidden");
-    viewTitle.innerText = "활동기록 캘린더현황";
+    viewTitle.innerText = "보고서 일정 캘린더";
     closeCalendarDetails();
   }
 
@@ -175,7 +161,7 @@ function renderListView(filtered) {
     container.innerHTML = `
       <div class="text-center py-20 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 text-slate-400 space-y-2 select-none">
         <i data-lucide="calendar" class="w-10 h-10 mx-auto text-slate-300"></i>
-        <p class="text-xs font-semibold">조건에 일치하는 전문인재 활동 기록이 없습니다.</p>
+        <p class="text-xs font-semibold">조건에 일치하는 공무원 보고 일정이 없습니다.</p>
         <p class="text-[10px] text-slate-400">새로운 일정을 입력하고 필터링 조회를 확인하세요.</p>
       </div>
     `;
@@ -190,25 +176,15 @@ function renderListView(filtered) {
   });
 
   container.innerHTML = sorted.map(act => {
-    const isEdu = act.type === "교육" || act.type === "강의";
-    const isConsult = act.type === "자문/컨설팅";
-    const isAudit = act.type === "평가/심사" || act.type === "연구";
+    const isExternal = act.type === "대외";
     
-    const borderClass = isEdu 
+    const borderClass = isExternal 
       ? "border-l-blue-500" 
-      : isConsult 
-        ? "border-l-indigo-500" 
-        : isAudit 
-          ? "border-l-amber-500" 
-          : "border-l-slate-400";
+      : "border-l-emerald-500";
 
-    const badgeClass = isEdu 
+    const badgeClass = isExternal 
       ? "bg-blue-100 text-blue-800" 
-      : isConsult 
-        ? "bg-indigo-100 text-indigo-800" 
-        : isAudit 
-          ? "bg-amber-100 text-amber-800" 
-          : "bg-slate-100 text-slate-700";
+      : "bg-emerald-100 text-emerald-800";
 
     return `
       <div class="border border-slate-200 rounded-xl p-4 flex gap-4 bg-white hover:shadow-md hover:border-slate-300 transition-all border-l-4 ${borderClass} animate-fade-in text-left">
@@ -219,6 +195,7 @@ function renderListView(filtered) {
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass}">
               ${act.type}
             </span>
+            <span class="text-slate-400 font-bold font-mono text-[11px]">${act.time || "09:00"}</span>
             <div class="flex items-center gap-1 text-slate-400 font-mono text-[11px]">
               <i data-lucide="calendar" class="w-3 h-3 text-slate-400"></i>
               <span>${act.startDate}</span>
@@ -231,31 +208,31 @@ function renderListView(filtered) {
 
           <!-- Title -->
           <div>
-            <h4 class="font-bold text-slate-800 text-[14px]">
-              <span class="text-blue-600 font-semibold mr-1">[${act.name}]</span> ${act.subject}
+            <h4 class="font-bold text-slate-850 text-[14px]">
+              <span class="text-blue-600 font-bold mr-1">[${act.dept}]</span> ${act.subject}
             </h4>
           </div>
 
           <!-- Details Grid -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg text-xs text-slate-600 font-medium">
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 text-[10px] w-12 shrink-0">💼 소속</span>
-              <span class="truncate text-slate-700">${act.org}</span>
+              <span class="text-slate-400 text-[10px] w-12 shrink-0">👤 담당자</span>
+              <span class="truncate text-slate-700">${act.manager} ${act.phone ? `(${act.phone})` : ''}</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 text-[10px] w-12 shrink-0">🏢 대상기관</span>
-              <span class="truncate text-slate-700">${act.targetOrg || '없음'}</span>
+              <span class="text-slate-400 text-[10px] w-12 shrink-0">🏢 장소</span>
+              <span class="truncate text-slate-700">${act.location || '없음'}</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 text-[10px] w-12 shrink-0">👥 참석인원</span>
+              <span class="text-slate-400 text-[10px] w-12 shrink-0">👥 참석자</span>
               <span class="truncate text-slate-700">${act.attendees || '없음'}</span>
             </div>
           </div>
 
-          <!-- Memo -->
-          ${act.memo ? `
+          <!-- Content Memo -->
+          ${act.content ? `
             <p class="text-slate-500 text-[11px] bg-white border border-slate-100 p-2 rounded-lg italic">
-              💡 ${act.memo}
+              💡 ${act.content}
             </p>
           ` : ''}
 
@@ -267,7 +244,7 @@ function renderListView(filtered) {
             type="button"
             onclick="deleteActivity('${act.id}')"
             class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition active:scale-95 cursor-pointer"
-            title="활동 삭제"
+            title="일정 삭제"
           >
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
@@ -280,7 +257,7 @@ function renderListView(filtered) {
 
 // Delete Handler
 function deleteActivity(id) {
-  if (!confirm("해당 전문인재 일정을 데이터베이스에서 삭제하시겠습니까?")) return;
+  if (!confirm("해당 일정을 삭제하시겠습니까?")) return;
   activities = activities.filter(a => a.id !== id);
   saveDatabase();
   renderMainApp();
@@ -489,11 +466,9 @@ function renderCalendarView(filtered) {
       const isEndThisWeek = actEndM <= weekEndMidnight;
 
       let colorClass = "bg-[#7084d3] text-white hover:bg-[#5f73c5] border border-[#7084d3]/30 shadow-xs";
-      if (act.type === "교육" || act.type === "강의") {
+      if (act.type === "대외") {
         colorClass = "bg-[#5e72e4] text-white hover:bg-[#4d61d3] border border-[#5e72e4]/30 shadow-xs";
-      } else if (act.type === "자문/컨설팅") {
-        colorClass = "bg-[#8965e0] text-white hover:bg-[#7854cf] border border-[#8965e0]/30 shadow-xs";
-      } else if (act.type === "평가/심사" || act.type === "연구") {
+      } else if (act.type === "내부") {
         colorClass = "bg-[#2dce89] text-white hover:bg-[#24b97a] border border-[#2dce89]/30 shadow-xs";
       }
 
@@ -502,12 +477,12 @@ function renderCalendarView(filtered) {
 
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `absolute text-left truncate text-[11px] px-3 font-semibold transition-all pointer-events-auto flex items-center z-20 cursor-pointer h-[24px] ${colorClass} ${lRound} ${rRound}`;
+      btn.className = `absolute text-left truncate text-[11px] px-1.5 font-semibold transition-all pointer-events-auto flex items-center z-20 cursor-pointer h-[24px] ${colorClass} ${lRound} ${rRound}`;
       btn.style.left = `calc(${(startCol / 7) * 100}% + 2px)`;
       btn.style.width = `calc(${((endCol - startCol + 1) / 7) * 100}% - 4px)`;
       btn.style.top = `${trackRow * 28}px`;
-      btn.title = `[${act.name}] ${act.subject}`;
-      btn.innerHTML = `<span class="truncate w-full pr-1 font-bold">[${act.name}] ${act.subject}</span>`;
+      btn.title = `[${act.dept}] ${act.subject}`;
+      btn.innerHTML = `<span class="truncate w-full pr-1 font-bold">[${act.dept}] ${act.subject}</span>`;
       
       btn.onclick = () => showCalendarDetails(act);
       barsContainer.appendChild(btn);
@@ -525,28 +500,24 @@ function showCalendarDetails(act) {
   card.classList.remove("hidden");
 
   // Format colors
-  const isEdu = act.type === "교육" || act.type === "강의";
-  const isConsult = act.type === "자문/컨설팅";
-  const isAudit = act.type === "평가/심사" || act.type === "연구";
-  let badgeColor = "bg-slate-100 text-slate-700";
-  if (isEdu) badgeColor = "bg-blue-100 text-blue-800";
-  else if (isConsult) badgeColor = "bg-indigo-100 text-indigo-800";
-  else if (isAudit) badgeColor = "bg-amber-100 text-amber-800";
+  const isExternal = act.type === "대외";
+  let badgeColor = isExternal ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800";
 
   document.getElementById("detail-card-badge").className = `text-[9px] font-bold px-1.5 py-0.5 rounded ${badgeColor}`;
   document.getElementById("detail-card-badge").innerText = act.type;
+  document.getElementById("detail-card-time").innerText = act.time || "09:00";
   document.getElementById("detail-card-dates").innerText = `${act.startDate} ~ ${act.endDate || act.startDate}`;
-  document.getElementById("detail-card-title").innerHTML = `<span class="text-blue-600 font-semibold mr-1">[${act.name}]</span> ${act.subject}`;
-  document.getElementById("detail-card-org").innerText = `💼 소속: ${act.org}`;
-  document.getElementById("detail-card-target").innerText = `🏢 대상: ${act.targetOrg || "없음"}`;
-  document.getElementById("detail-card-attendees").innerText = `👥 인원: ${act.attendees || "없음"}`;
+  document.getElementById("detail-card-title").innerHTML = `<span class="text-blue-600 font-bold mr-1">[${act.dept}]</span> ${act.subject}`;
+  document.getElementById("detail-card-manager").innerText = `👤 담당자: ${act.manager} ${act.phone ? `(${act.phone})` : ''}`;
+  document.getElementById("detail-card-location").innerText = `🏢 장소: ${act.location || "없음"}`;
+  document.getElementById("detail-card-attendees").innerText = `👥 참석자: ${act.attendees || "없음"}`;
   
-  const memoEl = document.getElementById("detail-card-memo");
-  if (act.memo) {
-    memoEl.innerText = `💡 ${act.memo}`;
-    memoEl.classList.remove("hidden");
+  const contentEl = document.getElementById("detail-card-content");
+  if (act.content) {
+    contentEl.innerText = `💡 내용: ${act.content}`;
+    contentEl.classList.remove("hidden");
   } else {
-    memoEl.classList.add("hidden");
+    contentEl.classList.add("hidden");
   }
 }
 
@@ -557,7 +528,7 @@ function closeCalendarDetails() {
 
 function deleteActivityInDetails() {
   if (!selectedActivity) return;
-  if (!confirm(`[${selectedActivity.name}] 일정을 삭제하시겠습니까?`)) return;
+  if (!confirm(`[${selectedActivity.subject}] 일정을 삭제하시겠습니까?`)) return;
   activities = activities.filter(a => a.id !== selectedActivity.id);
   saveDatabase();
   closeCalendarDetails();
@@ -606,15 +577,17 @@ function handleFormSubmit(e) {
   
   const start = document.getElementById("form-start-date").value;
   const end = document.getElementById("form-end-date").value;
+  const time = document.getElementById("form-time").value;
   const type = document.getElementById("form-type").value;
-  const name = document.getElementById("form-name").value;
-  const org = document.getElementById("form-org").value;
+  const dept = document.getElementById("form-dept").value;
+  const manager = document.getElementById("form-manager").value;
+  const phone = document.getElementById("form-phone").value;
   const subject = document.getElementById("form-subject").value;
-  const targetOrg = document.getElementById("form-target-org").value;
+  const location = document.getElementById("form-location").value;
   const attendees = document.getElementById("form-attendees").value;
-  const memo = document.getElementById("form-memo").value;
+  const content = document.getElementById("form-content").value;
 
-  if (!start || !type || !name || !org || !subject) {
+  if (!start || !time || !type || !dept || !manager || !subject) {
     alert("필수 항목(* 기입)을 모두 입력해 주세요!");
     return;
   }
@@ -623,19 +596,21 @@ function handleFormSubmit(e) {
     id: "act_" + Math.random().toString(36).substring(2, 11),
     startDate: start,
     endDate: end || start,
+    time: time,
     type: type,
-    name: name,
-    org: org,
+    dept: dept,
+    manager: manager,
+    phone: phone || "",
     subject: subject,
-    targetOrg: targetOrg || "",
+    location: location || "",
     attendees: attendees || "",
-    memo: memo || "",
+    content: content || "",
     createdAt: new Date().toISOString()
   };
 
   activities.push(newActivity);
   saveDatabase();
-  alert("전문인재 활동내역이 성공적으로 기록 및 연동되었습니다!");
+  alert("일정 보고서가 성공적으로 기록 및 연동되었습니다!");
   
   // Reset Form
   document.getElementById("activity-form").reset();
@@ -660,7 +635,7 @@ function toggleApiKeyVisibility() {
 async function runAiParse() {
   const promptText = document.getElementById("ai-prompt").value.trim();
   if (!promptText) {
-    alert("활동 연혁이나 텍스트 문장을 입력해 주세요.");
+    alert("보고서나 메신저 대화의 일정 텍스트 문장을 입력해 주세요.");
     return;
   }
 
@@ -673,7 +648,7 @@ async function runAiParse() {
   document.getElementById("ai-banner-error").classList.add("hidden");
 
   btn.disabled = true;
-  btnText.innerText = "분석 진행 중...";
+  btnText.innerText = "보고 일정 분석 중...";
 
   const apiKey = document.getElementById("gemini-api-key").value.trim();
 
@@ -693,24 +668,26 @@ async function runAiParse() {
   // If API key is provided, execute direct fetch to Google Gemini API
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const systemInstruction = `너는 텍스트에서 전문인재 활동 내역을 파싱하여 JSON으로 만들어주는 인공지능이야.
+    const systemInstruction = `너는 텍스트에서 공무원 일정 보고 내역을 파싱하여 JSON으로 만들어주는 인공지능이야.
 현재 날짜 기준: ${new Date().toISOString().split('T')[0]}.
 반드시 아래 JSON 포맷을 성실히 지켜서 순수한 JSON 형태로만 답변해줘. 마크다운 코드블록 기호없이 순수 JSON만 반환해야 돼.
 
 {
   "startDate": "YYYY-MM-DD",
   "endDate": "YYYY-MM-DD",
-  "type": "강의/자문/컨설팅/평가/심사/교육/연구/회의/기타 중 택1",
-  "name": "인물명",
-  "org": "소속기관명",
-  "subject": "주제 및 사업명",
-  "targetOrg": "대상기관명",
-  "attendees": "인원 구성 설명 또는 명수(예: 30명)",
-  "memo": "추가 일정 정보 또는 진행시간"
+  "time": "HH:MM (예: 14:00. 시간 정보가 없거나 모호하면 09:00으로 기본설정)",
+  "type": "대외/내부 중 택1",
+  "dept": "부서명",
+  "manager": "담당자명",
+  "phone": "전화번호 (정보가 없으면 빈문자열)",
+  "subject": "일정 제목",
+  "location": "장소",
+  "attendees": "참석자 설명 (예: 행안부 3명, 지자체 5명 등)",
+  "content": "일정 내용 설명"
 }`;
 
     const payload = {
-      contents: [{ parts: [{ text: `분석할 텍스트 문장: "${promptText}"` }] }],
+      contents: [{ parts: [{ text: `분석할 일정 문장: "${promptText}"` }] }],
       systemInstruction: { parts: [{ text: systemInstruction }] },
       generationConfig: { 
         responseMimeType: "application/json"
@@ -751,26 +728,23 @@ async function runAiParse() {
 function populateForm(parsed) {
   if (parsed.startDate) document.getElementById("form-start-date").value = parsed.startDate;
   if (parsed.endDate) document.getElementById("form-end-date").value = parsed.endDate;
+  if (parsed.time) document.getElementById("form-time").value = parsed.time;
   if (parsed.type) {
     const val = parsed.type;
     const opt = document.getElementById("form-type");
-    // Normalize or match select option
-    if (["교육", "강의", "자문/컨설팅", "평가/심사", "연구", "회의", "기타"].includes(val)) {
+    if (["대외", "내부"].includes(val)) {
       opt.value = val;
-    } else if (val.includes("자문") || val.includes("컨설팅")) {
-      opt.value = "자문/컨설팅";
-    } else if (val.includes("평가") || val.includes("심사")) {
-      opt.value = "평가/심사";
     } else {
-      opt.value = "기타";
+      opt.value = "대외";
     }
   }
-  if (parsed.name) document.getElementById("form-name").value = parsed.name;
-  if (parsed.org) document.getElementById("form-org").value = parsed.org;
+  if (parsed.dept) document.getElementById("form-dept").value = parsed.dept;
+  if (parsed.manager) document.getElementById("form-manager").value = parsed.manager;
+  if (parsed.phone) document.getElementById("form-phone").value = parsed.phone;
   if (parsed.subject) document.getElementById("form-subject").value = parsed.subject;
-  if (parsed.targetOrg) document.getElementById("form-target-org").value = parsed.targetOrg;
+  if (parsed.location) document.getElementById("form-location").value = parsed.location;
   if (parsed.attendees) document.getElementById("form-attendees").value = parsed.attendees;
-  if (parsed.memo) document.getElementById("form-memo").value = parsed.memo;
+  if (parsed.content) document.getElementById("form-content").value = parsed.content;
 }
 
 // HEURISTIC REGEX-BASED PARSER FALLBACK
@@ -778,31 +752,32 @@ function heuristicParse(text) {
   const result = {
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
-    type: "기타",
-    name: "전문인재",
-    org: "소속기관",
-    subject: "활동 주제",
-    targetOrg: "대상기관",
+    time: "09:00",
+    type: "대외",
+    dept: "디지털정부국",
+    manager: "담당자",
+    phone: "",
+    subject: "핵심 주간 회의",
+    location: "회의실",
     attendees: "",
-    memo: "AI 휴리스틱 분석 적용됨"
+    content: "보고서 구문 자동 파싱 완료"
   };
 
-  const nameMatch = text.match(/([가-힣]{2,4})\s?(?:전문인재|교수|수석연구원|사무관|주무관|처장|청장|원장|대표)/) || text.match(/([가-힣]{2,4})가\b/);
+  const nameMatch = text.match(/([가-힣]{2,4})\s?(?:주무관|사무관|과장|팀장|담당|서기관|비서관|대표)/) || text.match(/([가-힣]{2,4})가\b/);
   if (nameMatch) {
-    result.name = nameMatch[1];
+    result.manager = nameMatch[1];
   } else {
     const matches = text.match(/[가-힣]{3}/g);
     if (matches && matches.length > 0) {
-      result.name = matches[0];
+      result.manager = matches[0];
     }
   }
 
-  if (text.includes("교육")) result.type = "교육";
-  else if (text.includes("강의") || text.includes("특강") || text.includes("수업")) result.type = "강의";
-  else if (text.includes("자문") || text.includes("컨설팅")) result.type = "자문/컨설팅";
-  else if (text.includes("평가") || text.includes("심사")) result.type = "평가/심사";
-  else if (text.includes("연구") || text.includes("학술")) result.type = "연구";
-  else if (text.includes("회의") || text.includes("포럼") || text.includes("세미나")) result.type = "회의";
+  if (text.includes("내부") || text.includes("회의") || text.includes("주간업무") || text.includes("보고회")) {
+    result.type = "내부";
+  } else {
+    result.type = "대외";
+  }
 
   const today = new Date();
   const year = today.getFullYear();
@@ -824,25 +799,38 @@ function heuristicParse(text) {
     }
   }
 
-  const orgMatch = text.match(/\b([가-힣]{2,12}(?:소방청|행안부|NIA|한국[가-힣]+원|지능정보사회진흥원|대학교|연구원|협회))\b/);
-  if (orgMatch) {
-    result.org = orgMatch[1];
+  const timeRegex = /(\d{1,2})시\s*(\d{1,2})분?/ || /(\d{1,2}):(\d{2})/;
+  const matchTime = text.match(timeRegex);
+  if (matchTime) {
+    const hour = String(matchTime[1]).padStart(2, '0');
+    const min = matchTime[2] ? String(matchTime[2]).padStart(2, '0') : "00";
+    result.time = `${hour}:${min}`;
   }
 
-  const targetMatch = text.match(/(?:에서|을 위해|방문하여)\s*([가-힣A-Za-z0-9\s]{2,10}(?:센터|청사|대학|회의실|본부|지구|지점|NIA))/);
-  if (targetMatch) {
-    result.targetOrg = targetMatch[1].trim();
+  const phoneMatch = text.match(/(\d{2,3}-\d{3,4}-\d{4})/);
+  if (phoneMatch) {
+    result.phone = phoneMatch[1];
   }
 
-  const attendeesMatch = text.match(/(\d+명)/) || text.match(/(\d+\s*명)/);
-  if (attendeesMatch) {
-    result.attendees = attendeesMatch[1];
+  const deptMatch = text.match(/\b([가-힣]{2,10}(?:과|실|본부|국|청|처|부))\b/);
+  if (deptMatch) {
+    result.dept = deptMatch[1];
   }
 
-  const subjectWords = text.replace(result.name, "").replace(result.org, "").replace(result.targetOrg, "");
-  const subjectClean = subjectWords.match(/([가-힣\s]{4,30})(?:교육|진행|수행|자문|강의)/);
+  const locMatch = text.match(/(?:에서|방문하여|소재)\s*([가-힣A-Za-z0-9\s]{2,12}(?:회의실|대강당|청사|도청|시청|구청|본부|지사|세미나실))/);
+  if (locMatch) {
+    result.location = locMatch[1].trim();
+  }
+
+  const attMatch = text.match(/(\d+명)/) || text.match(/([가-힣\s,]{2,15} 등\s*\d*명?)/);
+  if (attMatch) {
+    result.attendees = attMatch[1];
+  }
+
+  const subjectWords = text.replace(result.manager, "").replace(result.dept, "").replace(result.location, "");
+  const subjectClean = subjectWords.match(/([가-힣\s]{4,30})(?:회의|진행|수행|보고|자문|교육|특강)/);
   if (subjectClean) {
-    result.subject = subjectClean[1].trim() + " " + (result.type);
+    result.subject = subjectClean[1].trim();
   } else {
     result.subject = text.substring(0, 30) + "...";
   }
@@ -944,13 +932,15 @@ function parseAndMergeIcs(icsText) {
             id: 'ical_' + Math.random().toString(36).substring(2, 7),
             startDate: parseDateStr(start),
             endDate: parseDateStr(end),
-            type: subject.includes("교육") ? "교육" : (subject.includes("강의") ? "강의" : (subject.includes("회의") ? "회의" : "기타")),
-            name: "외부 연동 일시",
-            org: "캘린더 연동처",
+            time: "09:00",
+            type: subject.includes("회의") || subject.includes("내부") ? "내부" : "대외",
+            dept: "캘린더 연동처",
+            manager: "외부 연동 일시",
+            phone: "",
             subject: subject,
-            targetOrg: currentEvent.location || "기록 참고",
+            location: currentEvent.location || "기록 참고",
             attendees: "",
-            memo: currentEvent.description || "iCal 동기화 연동 일정 데이터"
+            content: currentEvent.description || "iCal 동기화 연동 일정 데이터"
           });
         }
         insideEvent = false;
