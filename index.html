@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>전문인재 활동 기록 관리 및 시각화 시스템</title>
+  <title>공무원 일정 보고서 자동화 - 일정비서관</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Tailwind CSS Config for Custom Extensions -->
@@ -64,10 +64,10 @@
         </div>
         <div class="text-left">
           <h1 class="text-lg md:text-xl font-extrabold text-slate-900 tracking-tight">
-            전문인재 활동내역 통합 관리 시스템
+            공무원 일정 보고서 자동화 - 일정비서관
           </h1>
-          <p class="text-xs text-slate-500 mt-0.5">
-            전문가(자문역, 평가위원, 강사 등)의 다양한 외부 활동을 기록하고 가로 밴드형 캘린더로 모니터링하는 전문 사무 솔루션입니다.
+          <p class="text-xs text-slate-500 mt-0.5 font-semibold">
+            매주 반복되는 보고서, 이제 일정비서관에게 맡기세요
           </p>
         </div>
       </div>
@@ -89,49 +89,49 @@
             <i data-lucide="calendar" class="w-5 h-5"></i>
           </div>
           <div>
-            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">전체 활동 건수</p>
+            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">전체 일정 건수</p>
             <p class="text-lg md:text-xl font-bold text-slate-800" id="kpi-total">0건</p>
           </div>
         </div>
 
         <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3 text-left">
           <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <i data-lucide="user-check" class="w-5 h-5"></i>
+            <i data-lucide="globe" class="w-5 h-5"></i>
           </div>
           <div>
-            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">교육/강의 비율</p>
-            <p class="text-lg md:text-xl font-bold text-slate-800" id="kpi-edu-ratio">0% <span class="text-[10px] text-slate-400 font-normal ml-1">(0건)</span></p>
+            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">대외 업무 비율</p>
+            <p class="text-lg md:text-xl font-bold text-slate-800" id="kpi-external-ratio">0% <span class="text-[10px] text-slate-400 font-normal ml-1">(0건)</span></p>
           </div>
         </div>
 
         <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3 col-span-1 text-left">
           <div class="p-3 bg-violet-50 text-violet-600 rounded-xl">
-            <i data-lucide="trending-up" class="w-5 h-5"></i>
+            <i data-lucide="home" class="w-5 h-5"></i>
           </div>
           <div>
-            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">자문 및 컨설팅</p>
-            <p class="text-lg md:text-xl font-bold text-slate-800" id="kpi-consult">0건</p>
+            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">내부 업무 건수</p>
+            <p class="text-lg md:text-xl font-bold text-slate-800" id="kpi-internal">0건</p>
           </div>
         </div>
 
         <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3 col-span-1 text-left">
           <div class="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <i data-lucide="users" class="w-5 h-5"></i>
+            <i data-lucide="clock" class="w-5 h-5"></i>
           </div>
           <div>
-            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">심사/회의/연구</p>
-            <p class="text-lg md:text-xl font-bold text-slate-800" id="kpi-audit">0건</p>
+            <p class="text-slate-400 text-[10px] md:text-xs font-semibold uppercase">오늘 이후 일정</p>
+            <p class="text-lg md:text-xl font-bold text-slate-800" id="kpi-upcoming">0건</p>
           </div>
         </div>
 
         <div class="bg-indigo-600 text-white rounded-2xl p-4 shadow-xs flex flex-col justify-between col-span-2 lg:col-span-1 text-left select-none">
           <div class="flex items-center justify-between">
-            <span class="text-[10px] font-bold bg-indigo-500 text-indigo-100 px-2 py-0.5 rounded-full uppercase">DB Sync</span>
+            <span class="text-[10px] font-bold bg-indigo-500 text-indigo-100 px-2 py-0.5 rounded-full uppercase">Database</span>
             <i data-lucide="database" class="w-4 h-4 text-indigo-200"></i>
           </div>
           <div>
-            <h4 class="text-[11px] text-indigo-200 font-medium">데이터베이스 연동</h4>
-            <p class="text-xs font-bold text-white mt-1">실시간 자동 보존 활성화</p>
+            <h4 class="text-[11px] text-indigo-200 font-medium">데이터 연동 상태</h4>
+            <p class="text-xs font-bold text-white mt-1">로컬 영속화 보존 활성화</p>
           </div>
         </div>
 
@@ -158,7 +158,7 @@
             </div>
 
             <p class="text-xs text-indigo-700/80 mb-3 leading-relaxed text-left">
-              불규칙하게 수집된 메신저 일정 메시지나 비정형 텍스트를 입력하면, AI가 분석하여 아래 입력 폼 필드들을 자동으로 정확하게 입력해 줍니다. (API 키를 입력하면 라이브 Gemini 모델을 사용하고, 입력하지 않으면 자체 휴리스틱 분석 엔진으로 동작합니다.)
+              불규칙하게 수집된 보고 문서나 메시지 텍스트를 입력하면, AI가 분석하여 아래 입력 폼 필드들(부서, 시간, 담당자, 전화번호 등)을 자동으로 정확하게 매핑해 줍니다. (Gemini API Key 입력 시 최신 AI 구동, 미입력 시 고성능 휴리스틱 파서로 구동)
             </p>
 
             <div class="space-y-3">
@@ -185,7 +185,7 @@
                 <textarea
                   id="ai-prompt"
                   class="w-full text-xs p-3 border border-indigo-200/70 bg-white/85 rounded-xl h-24 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-indigo-300 font-mono"
-                  placeholder="예: 최준영 수석연구원이 6월 18일 제주테크노파크에서 20명 대상 원격 서버 설계 자문을 비대면으로 시행함"
+                  placeholder="예: 기획조정실 홍길동 주무관(02-123-4567)이 6월 18일 오전 10시 정부세종청사 회의실에서 지자체 합동 점검 회의를 개최할 예정입니다."
                 ></textarea>
               </div>
 
@@ -202,12 +202,12 @@
               <!-- Parsing feedback banners -->
               <div id="ai-banner-success" class="hidden bg-indigo-100/80 border border-indigo-200 text-indigo-800 text-[11px] p-2.5 rounded-lg flex items-center gap-1.5 animate-fade-in text-left">
                 <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600 shrink-0"></i>
-                <span>Gemini API 분석 모델이 모든 필드를 정확히 추출하였습니다!</span>
+                <span>Gemini API 분석 모델이 모든 필드를 완벽하게 파싱하여 채웠습니다!</span>
               </div>
 
               <div id="ai-banner-fallback" class="hidden bg-amber-50 border border-amber-200 text-amber-800 text-[11px] p-2.5 rounded-lg flex items-center gap-1.5 animate-fade-in text-left">
                 <i data-lucide="info" class="w-4 h-4 text-amber-600 shrink-0"></i>
-                <span>스마트 휴리스틱 컴파일러를 가동해 문장을 자동 분석 및 매핑했습니다.</span>
+                <span>스마트 휴리스틱 컴파일러를 가동해 일정 정보를 분석하고 매핑했습니다.</span>
               </div>
 
               <div id="ai-banner-error" class="hidden bg-rose-50 border border-rose-100 text-rose-800 text-[11px] p-2.5 rounded-lg flex items-center gap-1.5 animate-fade-in text-left">
@@ -222,7 +222,7 @@
             <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 select-none">
               <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
                 <i data-lucide="plus-circle" class="w-4 h-4 text-blue-600"></i>
-                활동내역 입력 정보
+                일정 보고서 상세 정보
               </h3>
               <span class="text-[10px] text-slate-400 font-medium">* 필수기입</span>
             </div>
@@ -232,7 +232,7 @@
               <!-- Row 1: Dates -->
               <div>
                 <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                  활동 기간 *
+                  기간 *
                 </label>
                 <div class="grid grid-cols-2 gap-2">
                   <input
@@ -249,104 +249,127 @@
                 </div>
               </div>
 
-              <!-- Row 2: Type & Name -->
+              <!-- Row 2: Time & Type -->
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                    활동 유형 *
+                    시간 *
                   </label>
-                  <select
-                    id="form-type"
-                    class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="교육">교육</option>
-                    <option value="강의">강의</option>
-                    <option value="자문/컨설팅">자문/컨설팅</option>
-                    <option value="평가/심사">평가/심사</option>
-                    <option value="연구">연구</option>
-                    <option value="회의">회의</option>
-                    <option value="기타">기타</option>
-                  </select>
+                  <input
+                    type="text"
+                    id="form-time"
+                    required
+                    placeholder="예: 14:00"
+                    class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 font-mono text-slate-800"
+                  />
                 </div>
 
                 <div>
                   <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                    인재 이름 *
+                    유형 *
+                  </label>
+                  <select
+                    id="form-type"
+                    class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 font-semibold"
+                  >
+                    <option value="대외">대외</option>
+                    <option value="내부">내부</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Row 3: Dept & Manager & Phone -->
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
+                    부서 *
                   </label>
                   <input
                     type="text"
-                    id="form-name"
+                    id="form-dept"
                     required
-                    placeholder="인명 기입"
+                    placeholder="부서명 기입"
+                    class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-800 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
+                    담당자 *
+                  </label>
+                  <input
+                    type="text"
+                    id="form-manager"
+                    required
+                    placeholder="담당자명"
                     class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-800 font-medium"
                   />
                 </div>
               </div>
 
-              <!-- Row 3: Org -->
+              <!-- Row 4: Phone -->
               <div>
                 <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                  소속기관명 *
+                  전화번호
                 </label>
                 <input
                   type="text"
-                  id="form-org"
-                  required
-                  placeholder="예: 한국지능정보사회진흥원"
-                  class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-800 font-medium"
+                  id="form-phone"
+                  placeholder="예: 010-1234-5678"
+                  class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-850 font-mono"
                 />
               </div>
 
-              <!-- Row 4: Subject -->
+              <!-- Row 5: Title (Subject) -->
               <div>
                 <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                  주제 및 사업명 *
+                  제목 *
                 </label>
                 <input
                   type="text"
                   id="form-subject"
                   required
-                  placeholder="교육 또는 프로젝트 주제명 기술"
-                  class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-800 font-medium"
+                  placeholder="회의 및 행사 일정 제목 기술"
+                  class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-900 font-bold"
                 />
               </div>
 
-              <!-- Row 5: Target & Attendees -->
+              <!-- Row 6: Location & Attendees -->
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                    대상기관
+                    장소
                   </label>
                   <input
                     type="text"
-                    id="form-target-org"
-                    placeholder="수혜 기관명"
+                    id="form-location"
+                    placeholder="예: 4동 제2회의실"
                     class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-800"
                   />
                 </div>
 
                 <div>
                   <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                    참석인원
+                    참석자
                   </label>
                   <input
                     type="text"
                     id="form-attendees"
-                    placeholder="예: 30명"
+                    placeholder="예: 과장 및 사무관 등"
                     class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-800"
                   />
                 </div>
               </div>
 
-              <!-- Row 6: Memo -->
+              <!-- Row 7: Content -->
               <div>
                 <label class="block text-[11px] font-bold text-slate-500 mb-1 leading-none uppercase">
-                  기타메모
+                  내용
                 </label>
                 <textarea
-                  id="form-memo"
+                  id="form-content"
                   rows="2"
-                  placeholder="시간 할당, 참석자 구성 등 자세한 특이사항"
+                  placeholder="일정 핵심 협의 사항 및 준비 세부 계획"
                   class="w-full p-2 border border-slate-200 bg-slate-50 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 text-slate-800"
                 ></textarea>
               </div>
@@ -355,7 +378,7 @@
                 type="submit"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-2.5 rounded-xl transition duration-150 flex items-center justify-center gap-1.5 shadow-sm active:scale-98 text-xs cursor-pointer"
               >
-                <i data-lucide="plus-circle" class="w-4 h-4"></i> 전문인재 활동 기록 등록하기
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> 일정 보고서에 등록하기
               </button>
 
             </form>
@@ -373,9 +396,9 @@
               <div class="text-left">
                 <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
                   <span class="w-1.5 h-4 bg-blue-600 rounded-full inline-block"></span>
-                  <span id="view-mode-title">활동기록 리스트현황</span>
+                  <span id="view-mode-title">보고서 일정 리스트</span>
                 </h3>
-                <p class="text-slate-400 text-xs mt-0.5">활동내역 필터링 및 구글 캘린더 단방향 일일 동기화 (iCal)</p>
+                <p class="text-slate-400 text-xs mt-0.5">보고 일정 필터 검색 및 구글 캘린더 단방향 일일 동기화 (iCal)</p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -428,7 +451,7 @@
                   type="text"
                   id="search-input"
                   oninput="handleSearchFilterChange()"
-                  placeholder="이름, 소속, 주제, 대상기관 검색..."
+                  placeholder="부서, 담당자, 제목, 장소, 내용 검색..."
                   class="w-full bg-white border border-slate-200 rounded-lg pl-8 p-1.5 text-xs focus:ring-1 focus:ring-blue-500"
                 />
               </div>
@@ -439,16 +462,11 @@
                 <select
                   id="filter-type"
                   onchange="handleSearchFilterChange()"
-                  class="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-blue-500"
+                  class="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-blue-500 font-semibold"
                 >
                   <option value="전체">전체 유형</option>
-                  <option value="교육">교육</option>
-                  <option value="강의">강의</option>
-                  <option value="자문/컨설팅">자문/컨설팅</option>
-                  <option value="평가/심사">평가/심사</option>
-                  <option value="연구">연구</option>
-                  <option value="회의">회의</option>
-                  <option value="기타">기타</option>
+                  <option value="대외">대외</option>
+                  <option value="내부">내부</option>
                 </select>
               </div>
 
@@ -516,18 +534,19 @@
               <div id="calendar-detail-card" class="hidden border-t border-slate-200 bg-slate-50 p-4 shrink-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in">
                 <div class="space-y-1 text-left">
                   <div class="flex items-center gap-2">
-                    <span id="detail-card-badge" class="text-[9px] font-bold px-1.5 py-0.5 rounded">교육</span>
+                    <span id="detail-card-badge" class="text-[9px] font-bold px-1.5 py-0.5 rounded">대외</span>
+                    <span id="detail-card-time" class="text-xs text-indigo-700 font-bold font-mono">14:00</span>
                     <span id="detail-card-dates" class="text-xs text-slate-500 font-mono">2026-06-11 ~ 2026-06-11</span>
                   </div>
                   <h4 class="font-bold text-slate-800 text-[13px]" id="detail-card-title">
-                    [홍길동] 인공지능 개론
+                    [기획조정실] 핵심 일정 회의
                   </h4>
                   <p class="text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
-                    <span id="detail-card-org">💼 소속: 한국대학교</span>
-                    <span id="detail-card-target">🏢 대상: 소방청</span>
-                    <span id="detail-card-attendees">👥 인원: 30명</span>
+                    <span id="detail-card-manager">👤 담당자: 홍길동 (010-1234-5678)</span>
+                    <span id="detail-card-location">🏢 장소: 회의실</span>
+                    <span id="detail-card-attendees">👥 참석자: 핵심 인원</span>
                   </p>
-                  <p class="text-[11px] text-slate-600 italic bg-white border border-slate-100 p-2 rounded-lg mt-2 hidden" id="detail-card-memo"></p>
+                  <p class="text-[11px] text-slate-600 italic bg-white border border-slate-100 p-2 rounded-lg mt-2 hidden" id="detail-card-content"></p>
                 </div>
                 <div class="flex gap-2 w-full sm:w-auto">
                   <button onclick="deleteActivityInDetails()" class="flex-1 sm:flex-none p-2 text-rose-500 hover:bg-rose-50 border border-rose-100 rounded-xl transition text-xs font-semibold flex items-center justify-center gap-1">
@@ -555,9 +574,9 @@
   <footer class="bg-slate-900 text-slate-400 py-8 px-6 mt-12 border-t border-slate-950 font-sans text-xs select-none">
     <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
       <div class="space-y-1.5 text-center md:text-left">
-        <h4 class="font-extrabold text-slate-200">전문인재 활동기록 통합 관리 플랫폼</h4>
+        <h4 class="font-extrabold text-slate-200">공무원 일정 보고서 자동화 플랫폼</h4>
         <p class="text-slate-500">
-          본 시스템은 보안 정책 및 웹 표준을 엄격히 준수하여 전문가의 모든 활동내역을 브라우저 보안 샌드박스 내에서 안전하게 가시화합니다.
+          본 시스템은 보안 정책 및 웹 표준을 엄격히 준수하여 모든 민감 보고 일정을 안전하게 보존하고 즉시 조서화할 수 있도록 지원합니다.
         </p>
       </div>
       <div class="flex flex-wrap justify-center gap-3">
