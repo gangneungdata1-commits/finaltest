@@ -1,6 +1,6 @@
 // Standalone Client-Side Application Logic for Expert Activity Tracker (User Version)
 
-// 1. DEFAULT SEED DATA (MAPPED TO THE NEW SCHEME)
+// 1. DEFAULT SEED DATA (MAPPED TO THE NEW SCHEME - STARTS EMPTY)
 const DEFAULT_ACTIVITIES = [];
 
 // 2. STATE STORAGE MANAGEMENT
@@ -11,6 +11,7 @@ let typeFilter = "전체";
 let currentCalendarDate = new Date(2026, 5, 11); // June 11, 2026
 let selectedActivity = null;
 let icalMethod = "text"; // "text" or "file"
+let editingActivityId = null; // State for tracking the currently edited activity
 
 // Initialize database
 function initDatabase() {
@@ -88,9 +89,6 @@ function calculateKPIs() {
   const total = activities.length;
   const externalCount = activities.filter(a => a.type === "대외").length;
   const internalCount = activities.filter(a => a.type === "내부").length;
-
-  // Upcoming events (today and future)
-  const todayStr = new Date().toISOString().split('T')[0];
   const upcomingCount = activities.filter(a => (a.startDate >= "2026-06-11")).length;
 
   document.getElementById("kpi-total").innerText = `${total}건`;
@@ -137,14 +135,14 @@ function switchViewMode(mode) {
   const viewTitle = document.getElementById("view-mode-title");
 
   if (mode === "list") {
-    btnList.className = "p-1 rounded-md transition-all bg-white text-blue-600 shadow-xs font-bold";
-    btnCal.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800";
+    btnList.className = "p-1 rounded-md transition-all bg-white dark:bg-slate-900 text-blue-600 shadow-xs font-bold";
+    btnCal.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200";
     listContainer.classList.remove("hidden");
     calContainer.classList.add("hidden");
     viewTitle.innerText = "보고서 일정 리스트";
   } else {
-    btnList.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800";
-    btnCal.className = "p-1 rounded-md transition-all bg-white text-blue-600 shadow-xs font-bold";
+    btnList.className = "p-1 rounded-md transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200";
+    btnCal.className = "p-1 rounded-md transition-all bg-white dark:bg-slate-900 text-blue-600 shadow-xs font-bold";
     listContainer.classList.add("hidden");
     calContainer.classList.remove("hidden");
     viewTitle.innerText = "보고서 일정 캘린더";
@@ -159,8 +157,8 @@ function renderListView(filtered) {
   const container = document.getElementById("view-list-container");
   if (filtered.length === 0) {
     container.innerHTML = `
-      <div class="text-center py-20 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 text-slate-400 space-y-2 select-none">
-        <i data-lucide="calendar" class="w-10 h-10 mx-auto text-slate-300"></i>
+      <div class="text-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-400 space-y-2 select-none">
+        <i data-lucide="calendar" class="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600"></i>
         <p class="text-xs font-semibold">조건에 일치하는 공무원 보고 일정이 없습니다.</p>
         <p class="text-[10px] text-slate-400">새로운 일정을 입력하고 필터링 조회를 확인하세요.</p>
       </div>
@@ -183,11 +181,11 @@ function renderListView(filtered) {
       : "border-l-emerald-500";
 
     const badgeClass = isExternal 
-      ? "bg-blue-100 text-blue-800" 
-      : "bg-emerald-100 text-emerald-800";
+      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" 
+      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300";
 
     return `
-      <div class="border border-slate-200 rounded-xl p-4 flex gap-4 bg-white hover:shadow-md hover:border-slate-300 transition-all border-l-4 ${borderClass} animate-fade-in text-left">
+      <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex gap-4 bg-white dark:bg-slate-900 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-750 transition-all border-l-4 ${borderClass} animate-fade-in text-left">
         <div class="flex-1 space-y-2">
           
           <!-- Meta Info -->
@@ -195,9 +193,9 @@ function renderListView(filtered) {
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeClass}">
               ${act.type}
             </span>
-            <span class="text-slate-400 font-bold font-mono text-[11px]">${act.time || "09:00"}</span>
-            <div class="flex items-center gap-1 text-slate-400 font-mono text-[11px]">
-              <i data-lucide="calendar" class="w-3 h-3 text-slate-400"></i>
+            <span class="text-slate-400 dark:text-slate-500 font-bold font-mono text-[11px]">${act.time || "09:00"}</span>
+            <div class="flex items-center gap-1 text-slate-400 dark:text-slate-500 font-mono text-[11px]">
+              <i data-lucide="calendar" class="w-3 h-3 text-slate-400 dark:text-slate-500"></i>
               <span>${act.startDate}</span>
               ${act.endDate && act.endDate !== act.startDate ? `
                 <span>~</span>
@@ -208,42 +206,50 @@ function renderListView(filtered) {
 
           <!-- Title -->
           <div>
-            <h4 class="font-bold text-slate-850 text-[14px]">
-              <span class="text-blue-600 font-bold mr-1">[${act.dept}]</span> ${act.subject}
+            <h4 class="font-bold text-slate-850 dark:text-slate-200 text-[14px]">
+              <span class="text-blue-600 dark:text-blue-400 font-bold mr-1">[${act.dept}]</span> ${act.subject}
             </h4>
           </div>
 
           <!-- Details Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg text-xs text-slate-600 font-medium">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/40 p-2 rounded-lg text-xs text-slate-600 dark:text-slate-400 font-medium">
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 text-[10px] w-12 shrink-0">👤 담당자</span>
-              <span class="truncate text-slate-700">${act.manager} ${act.phone ? `(${act.phone})` : ''}</span>
+              <span class="text-slate-400 dark:text-slate-500 text-[10px] w-12 shrink-0">👤 담당자</span>
+              <span class="truncate text-slate-700 dark:text-slate-300">${act.manager} ${act.phone ? `(${act.phone})` : ''}</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 text-[10px] w-12 shrink-0">🏢 장소</span>
-              <span class="truncate text-slate-700">${act.location || '없음'}</span>
+              <span class="text-slate-400 dark:text-slate-500 text-[10px] w-12 shrink-0">🏢 장소</span>
+              <span class="truncate text-slate-700 dark:text-slate-300">${act.location || '없음'}</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <span class="text-slate-400 text-[10px] w-12 shrink-0">👥 참석자</span>
-              <span class="truncate text-slate-700">${act.attendees || '없음'}</span>
+              <span class="text-slate-400 dark:text-slate-500 text-[10px] w-12 shrink-0">👥 참석자</span>
+              <span class="truncate text-slate-700 dark:text-slate-300">${act.attendees || '없음'}</span>
             </div>
           </div>
 
           <!-- Content Memo -->
           ${act.content ? `
-            <p class="text-slate-500 text-[11px] bg-white border border-slate-100 p-2 rounded-lg italic">
+            <p class="text-slate-500 dark:text-slate-400 text-[11px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-2 rounded-lg italic">
               💡 ${act.content}
             </p>
           ` : ''}
 
         </div>
 
-        <!-- Delete Action -->
-        <div class="flex flex-col justify-center border-l border-slate-100 pl-3 select-none">
+        <!-- Edit & Delete Action Side -->
+        <div class="flex flex-col gap-2 justify-center border-l border-slate-100 dark:border-slate-800 pl-3 select-none">
+          <button
+            type="button"
+            onclick="editActivityFromList('${act.id}')"
+            class="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition active:scale-95 cursor-pointer"
+            title="일정 수정"
+          >
+            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          </button>
           <button
             type="button"
             onclick="deleteActivity('${act.id}')"
-            class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition active:scale-95 cursor-pointer"
+            class="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition active:scale-95 cursor-pointer"
             title="일정 삭제"
           >
             <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -253,14 +259,6 @@ function renderListView(filtered) {
       </div>
     `;
   }).join("");
-}
-
-// Delete Handler
-function deleteActivity(id) {
-  if (!confirm("해당 일정을 삭제하시겠습니까?")) return;
-  activities = activities.filter(a => a.id !== id);
-  saveDatabase();
-  renderMainApp();
 }
 
 // 5. RENDER DYNAMIC CALENDAR ENGINE (VANILLA PORT FROM REACT)
@@ -409,14 +407,14 @@ function renderCalendarView(filtered) {
 
     // Week Row Div
     const weekRowDiv = document.createElement("div");
-    weekRowDiv.className = "relative bg-white flex flex-col border-b border-slate-100";
+    weekRowDiv.className = "relative bg-white dark:bg-slate-900 flex flex-col border-b border-slate-100 dark:border-slate-800 transition-colors duration-200";
     weekRowDiv.style.minHeight = `${minHeight}px`;
 
     // 1. Grid Background & Vertical lines
-    let bgHtml = `<div class="grid grid-cols-7 absolute inset-0 divide-x divide-slate-100/70 pointer-events-none">`;
+    let bgHtml = `<div class="grid grid-cols-7 absolute inset-0 divide-x divide-slate-100/70 dark:divide-slate-800/40 pointer-events-none">`;
     weekDays.forEach(dayObj => {
-      const bgClass = !dayObj.isCurrentMonth ? "bg-slate-50/40" : "bg-white";
-      const todayClass = dayObj.isToday ? "bg-blue-50/25" : "";
+      const bgClass = !dayObj.isCurrentMonth ? "bg-slate-50/40 dark:bg-slate-950/20" : "bg-white dark:bg-slate-900";
+      const todayClass = dayObj.isToday ? "bg-blue-50/25 dark:bg-blue-900/10" : "";
       bgHtml += `<div class="h-full ${bgClass} ${todayClass}"></div>`;
     });
     bgHtml += `</div>`;
@@ -430,7 +428,7 @@ function renderCalendarView(filtered) {
       const isFirst = dayObj.date.getDate() === 1;
       const dateLabel = isFirst ? `${dayObj.date.getMonth() + 1}월 1일` : `${dayObj.date.getDate()}`;
       
-      let numClass = "text-slate-700";
+      let numClass = "text-slate-700 dark:text-slate-300";
       if (dayObj.isToday) {
         numClass = "bg-blue-600 text-white font-extrabold shadow-sm scale-110";
       } else if (isSunday) {
@@ -438,7 +436,7 @@ function renderCalendarView(filtered) {
       } else if (isSaturday) {
         numClass = "text-blue-500";
       } else if (!dayObj.isCurrentMonth) {
-        numClass = "text-slate-300";
+        numClass = "text-slate-300 dark:text-slate-700";
       }
 
       daysHtml += `
@@ -501,13 +499,13 @@ function showCalendarDetails(act) {
 
   // Format colors
   const isExternal = act.type === "대외";
-  let badgeColor = isExternal ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800";
+  let badgeColor = isExternal ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300";
 
   document.getElementById("detail-card-badge").className = `text-[9px] font-bold px-1.5 py-0.5 rounded ${badgeColor}`;
   document.getElementById("detail-card-badge").innerText = act.type;
   document.getElementById("detail-card-time").innerText = act.time || "09:00";
   document.getElementById("detail-card-dates").innerText = `${act.startDate} ~ ${act.endDate || act.startDate}`;
-  document.getElementById("detail-card-title").innerHTML = `<span class="text-blue-600 font-bold mr-1">[${act.dept}]</span> ${act.subject}`;
+  document.getElementById("detail-card-title").innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-bold mr-1">[${act.dept}]</span> ${act.subject}`;
   document.getElementById("detail-card-manager").innerText = `👤 담당자: ${act.manager} ${act.phone ? `(${act.phone})` : ''}`;
   document.getElementById("detail-card-location").innerText = `🏢 장소: ${act.location || "없음"}`;
   document.getElementById("detail-card-attendees").innerText = `👥 참석자: ${act.attendees || "없음"}`;
@@ -530,8 +528,145 @@ function deleteActivityInDetails() {
   if (!selectedActivity) return;
   if (!confirm(`[${selectedActivity.subject}] 일정을 삭제하시겠습니까?`)) return;
   activities = activities.filter(a => a.id !== selectedActivity.id);
+  
+  // If we were editing this deleted activity, exit edit mode too!
+  if (editingActivityId === selectedActivity.id) {
+    exitEditMode();
+  }
+
   saveDatabase();
   closeCalendarDetails();
+  renderMainApp();
+}
+
+// 6. EDITING PROCESS (CALENDAR POPUP & LIST BUTTONS)
+function populateFormWithActivity(act) {
+  document.getElementById("form-start-date").value = act.startDate;
+  document.getElementById("form-end-date").value = act.endDate || act.startDate;
+  document.getElementById("form-time").value = act.time || "09:00";
+  document.getElementById("form-type").value = act.type || "대외";
+  document.getElementById("form-dept").value = act.dept || "";
+  document.getElementById("form-manager").value = act.manager || "";
+  document.getElementById("form-phone").value = act.phone || "";
+  document.getElementById("form-subject").value = act.subject || "";
+  document.getElementById("form-location").value = act.location || "";
+  document.getElementById("form-attendees").value = act.attendees || "";
+  document.getElementById("form-content").value = act.content || "";
+}
+
+function editSelectedActivityFromCalendar() {
+  if (!selectedActivity) return;
+  editActivityFromList(selectedActivity.id);
+  closeCalendarDetails(); // Close the popover after editing starts
+}
+
+function editActivityFromList(id) {
+  const act = activities.find(a => a.id === id);
+  if (!act) return;
+
+  editingActivityId = id;
+  populateFormWithActivity(act);
+
+  // Smooth scroll to the form element
+  document.getElementById("activity-form").scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Visual highlights for edit mode
+  document.getElementById("form-card-title").innerHTML = `<i data-lucide="edit-3" class="w-4 h-4 text-amber-500 animate-pulse"></i> 보고 일정 수정 진행 중`;
+  document.getElementById("form-required-badge").innerHTML = `<span class="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 font-bold px-2 py-0.5 rounded">수정 모드</span>`;
+  document.getElementById("btn-form-submit").className = "w-full bg-amber-500 hover:bg-amber-600 text-white font-bold p-2.5 rounded-xl transition duration-150 flex items-center justify-center gap-1.5 shadow-sm active:scale-98 text-xs cursor-pointer";
+  document.getElementById("text-form-submit").innerText = "일정 보고서 수정 완료하기";
+  document.getElementById("btn-cancel-edit").classList.remove("hidden");
+
+  // Re-instantiate icons
+  lucide.createIcons();
+}
+
+function exitEditMode() {
+  editingActivityId = null;
+  document.getElementById("activity-form").reset();
+
+  // Reset visual layout to Add Mode
+  document.getElementById("form-card-title").innerHTML = `<i data-lucide="plus-circle" class="w-4 h-4 text-blue-600"></i> 일정 보고서 상세 정보`;
+  document.getElementById("form-required-badge").innerText = "* 필수기입";
+  document.getElementById("btn-form-submit").className = "w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-2.5 rounded-xl transition duration-150 flex items-center justify-center gap-1.5 shadow-sm active:scale-98 text-xs cursor-pointer";
+  document.getElementById("text-form-submit").innerText = "일정 보고서에 등록하기";
+  document.getElementById("btn-cancel-edit").classList.add("hidden");
+
+  // Re-instantiate icons
+  lucide.createIcons();
+}
+
+// 7. HANDLERS FOR NEW MANUAL FORM SUBMISSIONS (CREATE & UPDATE)
+function handleFormSubmit(e) {
+  e.preventDefault();
+  
+  const start = document.getElementById("form-start-date").value;
+  const end = document.getElementById("form-end-date").value;
+  const time = document.getElementById("form-time").value;
+  const type = document.getElementById("form-type").value;
+  const dept = document.getElementById("form-dept").value;
+  const manager = document.getElementById("form-manager").value;
+  const phone = document.getElementById("form-phone").value;
+  const subject = document.getElementById("form-subject").value;
+  const location = document.getElementById("form-location").value;
+  const attendees = document.getElementById("form-attendees").value;
+  const content = document.getElementById("form-content").value;
+
+  if (!start || !time || !type || !dept || !manager || !subject) {
+    alert("필수 항목(* 기입)을 모두 입력해 주세요!");
+    return;
+  }
+
+  if (editingActivityId) {
+    // 1) UPDATE MODE
+    activities = activities.map(act => {
+      if (act.id === editingActivityId) {
+        return {
+          ...act,
+          startDate: start,
+          endDate: end || start,
+          time: time,
+          type: type,
+          dept: dept,
+          manager: manager,
+          phone: phone || "",
+          subject: subject,
+          location: location || "",
+          attendees: attendees || "",
+          content: content || ""
+        };
+      }
+      return act;
+    });
+
+    alert("보고서 일정이 성공적으로 수정 완료되었습니다!");
+    exitEditMode();
+  } else {
+    // 2) CREATE MODE
+    const newActivity = {
+      id: "act_" + Math.random().toString(36).substring(2, 11),
+      startDate: start,
+      endDate: end || start,
+      time: time,
+      type: type,
+      dept: dept,
+      manager: manager,
+      phone: phone || "",
+      subject: subject,
+      location: location || "",
+      attendees: attendees || "",
+      content: content || "",
+      createdAt: new Date().toISOString()
+    };
+
+    activities.push(newActivity);
+    alert("일정 보고서가 성공적으로 기록 및 연동되었습니다!");
+    
+    // Reset Form
+    document.getElementById("activity-form").reset();
+  }
+
+  saveDatabase();
   renderMainApp();
 }
 
@@ -571,54 +706,7 @@ function safeParseDate(dateStr) {
   return null;
 }
 
-// 6. HANDLERS FOR NEW MANUAL FORM SUBMISSIONS
-function handleFormSubmit(e) {
-  e.preventDefault();
-  
-  const start = document.getElementById("form-start-date").value;
-  const end = document.getElementById("form-end-date").value;
-  const time = document.getElementById("form-time").value;
-  const type = document.getElementById("form-type").value;
-  const dept = document.getElementById("form-dept").value;
-  const manager = document.getElementById("form-manager").value;
-  const phone = document.getElementById("form-phone").value;
-  const subject = document.getElementById("form-subject").value;
-  const location = document.getElementById("form-location").value;
-  const attendees = document.getElementById("form-attendees").value;
-  const content = document.getElementById("form-content").value;
-
-  if (!start || !time || !type || !dept || !manager || !subject) {
-    alert("필수 항목(* 기입)을 모두 입력해 주세요!");
-    return;
-  }
-
-  const newActivity = {
-    id: "act_" + Math.random().toString(36).substring(2, 11),
-    startDate: start,
-    endDate: end || start,
-    time: time,
-    type: type,
-    dept: dept,
-    manager: manager,
-    phone: phone || "",
-    subject: subject,
-    location: location || "",
-    attendees: attendees || "",
-    content: content || "",
-    createdAt: new Date().toISOString()
-  };
-
-  activities.push(newActivity);
-  saveDatabase();
-  alert("일정 보고서가 성공적으로 기록 및 연동되었습니다!");
-  
-  // Reset Form
-  document.getElementById("activity-form").reset();
-  
-  renderMainApp();
-}
-
-// 7. AI PARSING ASSISTANT (GEMINI & HEURISTIC FALLBACK)
+// 8. AI PARSING ASSISTANT (GEMINI & HEURISTIC FALLBACK)
 function toggleApiKeyVisibility() {
   const el = document.getElementById("gemini-api-key");
   const eye = document.getElementById("api-key-eye");
@@ -838,7 +926,7 @@ function heuristicParse(text) {
   return result;
 }
 
-// 8. ICAL MODAL CONTROLLER & ICS RFC 5545 PARSER
+// 9. ICAL MODAL CONTROLLER & ICS RFC 5545 PARSER
 function openIcalModal() {
   document.getElementById("ical-modal").classList.remove("hidden");
 }
@@ -983,13 +1071,46 @@ function parseAndMergeIcs(icsText) {
   }
 }
 
-// 9. INITIALIZATION EVENT TRIGGER
+// 10. DARK/LIGHT THEME CONTROLLER
+function toggleDarkMode() {
+  const isDark = document.documentElement.classList.toggle("dark");
+  localStorage.setItem("standalone_theme", isDark ? "dark" : "light");
+  updateThemeIcons(isDark);
+}
+
+function updateThemeIcons(isDark) {
+  const sun = document.getElementById("theme-icon-sun");
+  const moon = document.getElementById("theme-icon-moon");
+  if (isDark) {
+    sun.classList.add("hidden");
+    moon.classList.remove("hidden");
+  } else {
+    sun.classList.remove("hidden");
+    moon.classList.add("hidden");
+  }
+}
+
+function loadThemePreference() {
+  const savedTheme = localStorage.getItem("standalone_theme");
+  const isSystemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const useDark = savedTheme === "dark" || (!savedTheme && isSystemDark);
+
+  if (useDark) {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+  updateThemeIcons(useDark);
+}
+
+// 11. INITIALIZATION EVENT TRIGGER
 function refreshData() {
   initDatabase();
   renderMainApp();
 }
 
 window.onload = function() {
+  loadThemePreference();
   initDatabase();
   renderMainApp();
 };
